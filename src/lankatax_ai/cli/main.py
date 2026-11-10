@@ -3,7 +3,6 @@ from rich import print as rprint
 
 app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipeline")
 
-
 @app.command()
 def scrape(
     full: bool = typer.Option(False, help="Scrape all pages"),
@@ -70,7 +69,3 @@ def graph():
         Exports the multi agent graph as a mermaid diagram
     """
     rprint("[bold green]✓[/] exporting LangGraph as Mermaid")
-
-
-if __name__ == "__main__":
-    app()
