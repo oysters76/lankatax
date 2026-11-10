@@ -1,0 +1,380 @@
+[
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Income%20Tax.aspx?menuid=1201",
+    "category": "tax_info",
+    "label": "Income Tax (IT)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Pay%20As%20You%20Earn%20(PAYE).aspx?menuid=1202",
+    "category": "tax_info",
+    "label": "Pay As You Earn (PAYE)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Value%20Added%20Tax%20(VAT).aspx?menuid=1204",
+    "category": "tax_info",
+    "label": "Value Added Tax (VAT)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Simplified%20Value%20Added%20Tax%20(SVAT)%20Scheme.aspx?menuid=1205",
+    "category": "tax_info",
+    "label": "Simplified Value Added Tax (SVAT) Scheme",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/type%20of%20taxes/sitepages/social%20security%20contribution%20levy%20(sscl).aspx?menuid=1207",
+    "category": "tax_info",
+    "label": "Social Security Contribution Levy (SSCL)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Capital%20Gain%20Tax%20(CGT).aspx?menuid=1208",
+    "category": "tax_info",
+    "label": "Capital Gain Tax (CGT)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/StampDuty.aspx?menuid=1209",
+    "category": "tax_info",
+    "label": "Stamp Duty (SD)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Betting%20and%20Gaming%20Levy.aspx?menuid=1210",
+    "category": "tax_info",
+    "label": "Betting and Gaming Levy (B&GL)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Share%20Transaction%20Levy.aspx?menuid=1211",
+    "category": "tax_info",
+    "label": "Share Transaction Levy (STL)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Tourist%20VAT%20Refund%20Scheme%20(TVRS).aspx?menuid=1213",
+    "category": "tax_info",
+    "label": "Tourist VAT Refund Scheme (TVRS)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Nation%20Building%20Tax(NBT).aspx?menuid=1214",
+    "category": "tax_info",
+    "label": "Nation Building Tax (NBT)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Economic%20Service%20Charge%20(ESC).aspx?menuid=1215",
+    "category": "tax_info",
+    "label": "Economic Service Charge (ESC)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Construction%20Industry%20Guarantee%20Fund%20Levy%20(CIGFL).aspx?menuid=1216",
+    "category": "tax_info",
+    "label": "Construction Industry Guarantee Fund Levy (CIGFL)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Employer%20responsibilities%20(PAYE).aspx?menuid=1409",
+    "category": "tax_info",
+    "label": "Employer Responsibilities (PAYE)",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/tax_chart_2526.aspx?menuid=1404",
+    "category": "tax_info",
+    "label": "Tax Chart 2025/2026",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Tax%20Calendar.aspx?menuid=1405",
+    "category": "tax_info",
+    "label": "Tax Calendar",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Online_Pay_OTP.aspx?menuid=1416",
+    "category": "tax_info",
+    "label": "Tax Payments",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/VAT%20Refund%20Procedure.aspx?menuid=1410",
+    "category": "tax_info",
+    "label": "VAT Refund Procedure",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Inactive%20VAT%20List.aspx?menuid=1411",
+    "category": "tax_info",
+    "label": "Inactive VAT List",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/Economic%20Activity%20Codes.aspx?menuid=1407",
+    "category": "tax_info",
+    "label": "Economic Activity Codes",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Approved%20Charity.aspx?menuid=1408",
+    "category": "tax_info",
+    "label": "Approved Charity",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Issuing%20of%20Privilege%20Cards.aspx?menuid=1406",
+    "category": "tax_info",
+    "label": "Issuing of Privilege Cards",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/International%20Relations.aspx?menuid=1401",
+    "category": "tax_info",
+    "label": "International Relations",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Guide%20to%20Taxpayers.aspx?menuid=1403",
+    "category": "guide",
+    "label": "Guide to Taxpayers",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/IT_Individuals_Doc/Guide_to_IIT_2425_E.pdf",
+    "category": "guide",
+    "label": "Guide to File Individual Return of Income Online",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/SiteAssets/TPR_Guidelines_2026_E.pdf",
+    "category": "guide",
+    "label": "Guide to Registration and Update",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Shared%20Documents/TPR_Guidelines_1.2_E.pdf",
+    "category": "guide",
+    "label": "Business Registration and Update Guide",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/eServices/Lists/PaymentRefund/Attachments/7/User_Guide_for_IRD_Online_Payment_E.pdf",
+    "category": "guide",
+    "label": "How to Pay Taxes Online",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/eServices/Lists/FilingReturns/Attachments/17/VAT_WEB_API_Quick_Guide_v0_1.pdf",
+    "category": "guide",
+    "label": "VAT WEB API Quick Guide",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Quick%20Guide/IRD%20Portal%20Map%20(English).pdf",
+    "category": "guide",
+    "label": "IRD Portal Map",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Shared%20Documents/Terminal_Benefits_2025_E.pdf",
+    "category": "guide",
+    "label": "Release of Terminal Benefits",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/TVRS_Apps_Doc/Authorized_Retailers_-_TVRS_2025.pdf",
+    "category": "guide",
+    "label": "TVRS Authorized Retailers",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SiteAssets/Taxpayer_Charter_Final.pdf?menuid=1509",
+    "category": "guide",
+    "label": "Taxpayer Charter",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SiteAssets/SL_VCIP_2025_2026_E.pdf?menuid=1510",
+    "category": "guide",
+    "label": "VAT Compliance Improvement Plan 1",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/Docs_Public/SL_VCIP_Plan%202_2026_E.pdf?menuid=1511",
+    "category": "guide",
+    "label": "VAT Compliance Improvement Plan 2",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/eServices/sitepages/Registration.aspx?menuid=180101",
+    "category": "guide",
+    "label": "e-Services Overview and Quick Guides",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/eservices/sitepages/e-learning.aspx?menuid=180201",
+    "category": "guide",
+    "label": "e-Learning",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/SitePages/Quick%20Guides.aspx?menuid=1606",
+    "category": "guide",
+    "label": "Quick Guides",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/Annual%20Performance%20Report.aspx?menuid=1501",
+    "category": "guide",
+    "label": "Annual Performance Report",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/apit_tax_tables.aspx?menuid=1502",
+    "category": "guide",
+    "label": "APIT Tax Tables",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/PAYE%20Tax%20Tables.aspx?menuid=1503",
+    "category": "guide",
+    "label": "PAYE Tax Tables",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/Circulars.aspx?menuid=1506",
+    "category": "circular",
+    "label": "Circulars",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/interpretations%20and%20rulings%202018.aspx?menuid=1507",
+    "category": "circular",
+    "label": "Interpretations and Rulings",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/SitePages/Public_Rulings.aspx?menuid=1508",
+    "category": "circular",
+    "label": "Public Rulings",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/Acts.aspx?menuid=1601",
+    "category": "act",
+    "label": "Acts",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/publications/sitepages/Gazette.aspx?menuid=1602",
+    "category": "gazette",
+    "label": "Gazette",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/SitePages/Forms.aspx?menuid=1603",
+    "category": "form",
+    "label": "Forms and Returns",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Downloads/SitePages/Schedules.aspx?menuid=1604",
+    "category": "schedule",
+    "label": "Schedules",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/SitePages/FAQs.aspx",
+    "category": "faq",
+    "label": "FAQs",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/SitePages/News%20and%20Notices.aspx?menuid=1402",
+    "category": "notice",
+    "label": "News and Notices",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/SitePages/AlertsandAnnouncements.aspx?menuid=1418",
+    "category": "notice",
+    "label": "Alerts and Announcements",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/SitePages/UpcomingDueDatesList.aspx?menuid=1417",
+    "category": "notice",
+    "label": "Upcoming Due Dates",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/SitePages/Latest%20Content%20Listing.aspx?menuid=1412",
+    "category": "notice",
+    "label": "Latest Content Listing",
+    "type": "page"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/823/SEC_PN_IT_2026-06_E.pdf",
+    "category": "notice",
+    "label": "Mandatory Submission of TIN Certificate for Specified Transactions",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/822/AIT_WHT_APIT_03112026_E.pdf",
+    "category": "notice",
+    "label": "APIT/AIT/WHT Payments for October 2026",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/821/BGL_03112026_E.pdf",
+    "category": "notice",
+    "label": "Betting & Gaming Levy Payment Notice (Nov 2026)",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/820/Sec_TRC_19012026_E.pdf",
+    "category": "notice",
+    "label": "How to Obtain Tax Residency Certificates (TRC)",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/819/SSCL_05102026_26303_E.pdf",
+    "category": "notice",
+    "label": "SSCL Payments for September 2026",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/818/VAT_05102026_26330_E.pdf",
+    "category": "notice",
+    "label": "VAT Payments and Returns for September 2026",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/817/VATFS_05102026_26090_E.pdf",
+    "category": "notice",
+    "label": "VAT on Financial Services Payments for September 2026",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/816/SD_05102026_26090_E.pdf",
+    "category": "notice",
+    "label": "Stamp Duty Statement and Payments",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/815/BGL_05102026_E.pdf",
+    "category": "notice",
+    "label": "Betting & Gaming Levy Payment Notice (Oct 2026)",
+    "type": "pdf"
+  },
+  {
+    "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/814/REG_02102026_E.pdf",
+    "category": "notice",
+    "label": "TIN Verification through IRD e-Services",
+    "type": "pdf"
+  }
+]
