@@ -1,3 +1,7 @@
+import os
+
+os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
+
 import pytest
 import pytest_asyncio
 from pathlib import Path
@@ -30,7 +34,7 @@ def async_engine(db_url):
     # Create and yield the async engine
     engine = create_async_engine(db_url.replace("psycopg2", "asyncpg"), echo=True)
     yield engine
-    
+
     # Properly close async engine connection pools on test suite exit
     # (Since this is a synchronous fixture, we don't await engine.dispose())
     engine.sync_engine.dispose()
@@ -38,7 +42,15 @@ def async_engine(db_url):
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def session(async_engine):
-    # Both scope (pytest life) and loop_scope (asyncio life) must be set to "session"
     async with AsyncSession(async_engine) as session:
         yield session
         await session.rollback()
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def clean_session(async_engine):
+    """Per-test session that rolls back after each test — no data leaks."""
+    async with AsyncSession(async_engine) as session:
+        await session.execute(text("DELETE FROM documents"))
+        await session.commit()
+        yield session
