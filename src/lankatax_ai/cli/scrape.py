@@ -94,10 +94,14 @@ def _do_scrape(full: bool = False):
             return
 
     if results:
-        saved = asyncio.run(_save_results(results, full))
+        saved = asyncio.run(_save_and_dispose(results, full))
         Console().print(f"[green]Saved {saved} documents to DB[/green]")
 
-    asyncio.run(dispose_engine())
+
+async def _save_and_dispose(results: list[AsyncCrawlerFetchResult], full: bool) -> int:
+    saved = await _save_results(results, full)
+    await dispose_engine()
+    return saved
 
 
 async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> int:

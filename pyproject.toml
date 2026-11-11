@@ -1,10 +1,10 @@
 [project]
 name = "lankatax-ai"
 version = "0.1.0"
-description = "Add your description here"
+description = "LKR Tax query software"
 readme = "README.md"
 authors = [
-    { name = "risira", email = "risira@stekz.com" }
+    { name = "chirath", email = "chirath.nishshanka@gmail.com" }
 ]
 requires-python = ">=3.12,<3.14"
 dependencies = [

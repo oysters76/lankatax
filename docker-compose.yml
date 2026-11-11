@@ -8,7 +8,7 @@ services:
         ports:
             - "5433:5432" 
         volumes:
-            - "pgdata:/var/lib/posgresql/data"
-            - ".src/lankatax_ai/backend/db/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql"
+            - "pgdata:/var/lib/postgresql/data"
+            - "./src/lankatax_ai/backend/db/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql"
 volumes:
     pgdata: 
