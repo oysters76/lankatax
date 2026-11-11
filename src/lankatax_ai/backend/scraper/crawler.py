@@ -169,6 +169,9 @@ class AsyncCrawler:
     ) -> AsyncCrawlerParsedPage:
         soup = bs(html, "html.parser")
 
+        for noscript in soup.find_all("noscript"):
+            noscript.decompose()
+
         title_tag = soup.find("title")
         title = title_tag.get_text(strip=True) if title_tag else ""
 
@@ -182,6 +185,8 @@ class AsyncCrawler:
                 if id(el) in seen:
                     continue
                 seen.add(id(el))
+                for parent in el.parents:
+                    seen.add(id(parent))
                 text = el.get_text(separator="\n", strip=True)
                 if text:
                     parts_text.append(text)
