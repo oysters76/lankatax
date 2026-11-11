@@ -5,10 +5,10 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from lankatax_ai.backend.db.session import async_session
+from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler, AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import URLRegistry
-from lankatax_ai.backend.scraper.storage import get_hash_map, save_documents
+from lankatax_ai.backend.scraper.storage import get_hash_map, get_scrape_status, save_documents
 from lankatax_ai.backend.scraper.transform import to_document_record
 
 
@@ -48,7 +48,28 @@ def _list_urls():
 
 
 def _show_status():
-    pass
+    asyncio.run(_show_status_async())
+
+
+async def _show_status_async():
+    console = Console()
+    async with async_session() as session:
+        status = await get_scrape_status(session)
+
+    if status.total == 0:
+        console.print("[dim]No documents scraped yet.[/dim]")
+    else:
+        table = Table(title="Scrape Status", show_lines=False, padding=(0, 2))
+        table.add_column("Metric", style="bold")
+        table.add_column("Value", justify="right")
+
+        table.add_row("Total documents", f"[cyan]{status.total}[/cyan]")
+        table.add_row("Scraped (last 24h)", f"[green]{status.recent}[/green]")
+        table.add_row("First scrape", f"[dim]{status.first_scrape:%Y-%m-%d %H:%M}[/dim]")
+        table.add_row("Last scrape", f"[dim]{status.last_scrape:%Y-%m-%d %H:%M}[/dim]")
+
+        console.print(table)
+    await dispose_engine()
 
 
 def _do_scrape(full: bool = False):
@@ -75,6 +96,8 @@ def _do_scrape(full: bool = False):
     if results:
         saved = asyncio.run(_save_results(results, full))
         Console().print(f"[green]Saved {saved} documents to DB[/green]")
+
+    asyncio.run(dispose_engine())
 
 
 async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> int:
