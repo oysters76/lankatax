@@ -9,7 +9,7 @@ def pdf_to_text(pdf_bytes: bytes, threshold:int = 50) -> str:
             return _ocr_pdf(pdf) 
     return text 
 
-def _ocr_pdf(pdf) -> str:
+def _ocr_pdf(pdf: pdfplumber.PDF) -> str:
     try:
         import pytesseract
     except ImportError:

@@ -1,12 +1,18 @@
-import httpx
-from httpx import Timeout
+from __future__ import annotations
+
 import asyncio
-from registry import ScrapableURL, DocType
 import dataclasses
-from enum import Enum
-from bs4 import BeautifulSoup as bs
+import random
 import re
+from collections.abc import Callable
+from enum import Enum
 from urllib.parse import urljoin
+
+import httpx
+from bs4 import BeautifulSoup as bs
+from httpx import Timeout
+
+from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL
 
 
 class AsyncCrawlerErrorKind(Enum):
@@ -17,12 +23,14 @@ class AsyncCrawlerErrorKind(Enum):
     retries_exhausted = "retries_exhausted"
     unknown_error = "unknown_error"
 
+
 @dataclasses.dataclass
 class AsyncCrawlerParsedPage:
     title: str
     text: str
     raw_html: str
     pdf_links: list[str]
+
 
 @dataclasses.dataclass
 class AsyncCrawlerResult:
@@ -35,10 +43,11 @@ class AsyncCrawlerResult:
     def is_error(self):
         return self.error is not None
 
+
 @dataclasses.dataclass
 class AsyncCrawlerFetchResult:
     url: str
-    entry: ScrapableURL    
+    entry: ScrapableURL
     parsed_page: AsyncCrawlerParsedPage | None = None
     pdf_bytes: bytes | None = None
     error: AsyncCrawlerErrorKind | None = None
@@ -46,6 +55,7 @@ class AsyncCrawlerFetchResult:
     @property
     def is_error(self):
         return self.error is not None
+
 
 class AsyncCrawler:
     CONTENT_SELECTORS = [
@@ -61,6 +71,8 @@ class AsyncCrawler:
         connect: int = 5,
         retries: int = 3,
         headers: dict[str:str] = {"User-Agent": "LankaTaxAI"},
+        min_delay: float = 3,
+        max_delay: float = 5,
     ):
         self._timeout_size = timeout
         self._connect = connect
@@ -69,7 +81,9 @@ class AsyncCrawler:
         self._timeout: httpx.Timeout | None = None
         self._transport: httpx.AsyncHTTPTransport | None = None
         self._client: httpx.AsyncClient | None = None
-        self._lock: asyncio.Lock = asyncio.Lock()  
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._min_delay = min_delay
+        self._max_delay = max_delay
 
         self._regex_heading = re.compile(r"^h[1-6]$")
 
@@ -92,9 +106,9 @@ class AsyncCrawler:
         await self._client.aclose()
         self._client = None
 
-    async def _rate_limit(self, sleep_for:int=2):
+    async def _rate_limit(self):
         async with self._lock:
-            await asyncio.sleep(sleep_for) 
+            await asyncio.sleep(random.uniform(self._min_delay, self._max_delay))
 
     async def _wait_longer(self, attempt: int):
         await asyncio.sleep(2 ** (attempt + 2))
@@ -105,7 +119,7 @@ class AsyncCrawler:
     async def fetch(self, url: str, attempts: int = 3) -> AsyncCrawlerResult:
         try:
             for attempt in range(attempts):
-                await self._rate_limit() 
+                await self._rate_limit()
                 response = await self._client.get(url)
                 sc = response.status_code
 
@@ -201,7 +215,7 @@ class AsyncCrawler:
         if result.is_error:
             return AsyncCrawlerFetchResult(url=entry.url, entry=entry, error=result.error)
 
-        if entry.doc_type == DocType.pdf:
+        if entry.kind == DocumentKind.pdf:
             return AsyncCrawlerFetchResult(
                 url=entry.url,
                 entry=entry,
@@ -216,12 +230,18 @@ class AsyncCrawler:
         )
 
     async def crawl_all(
-        self, entries: list[ScrapableURL], max_concurrent: int = 5
+        self,
+        entries: list[ScrapableURL],
+        max_concurrent: int = 5,
+        on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
     ) -> list[AsyncCrawlerFetchResult]:
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def _limited(entry: ScrapableURL) -> AsyncCrawlerFetchResult:
             async with semaphore:
-                return await self.crawl_url(entry)
+                result = await self.crawl_url(entry)
+                if on_result:
+                    on_result(result)
+                return result
 
         return await asyncio.gather(*[_limited(e) for e in entries])

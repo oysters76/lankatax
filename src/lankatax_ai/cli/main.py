@@ -1,20 +1,10 @@
 import typer
 from rich import print as rprint
 
-app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipeline")
+from lankatax_ai.cli.scrape import scrape
 
-@app.command()
-def scrape(
-    full: bool = typer.Option(False, help="Scrape all pages"),
-    status: bool = typer.Option(False, help="Print the status of scraping"),
-):
-    """
-        Scrape ird.gov.lk - incremental by default, --full for all, --status for last run.
-    """
-    if status:
-        rprint("[bold yellow]⚠ [/] No scrape runs yet")
-        return
-    rprint(f"[bold green]✓[/] scrape ird.gov.lk (full={full}, status={status})")
+app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipeline")
+app.command()(scrape)
 
 
 @app.command()
@@ -24,7 +14,7 @@ def ingest(
     document_id: str = typer.Option(None, help="Ingest a specific document by ID"),
 ):
     """
-        Ingests documents into the pipeline or a specific document
+    Ingests documents into the pipeline or a specific document
     """
     rprint(
         f"[bold green]✓[/] ingest documents "
@@ -39,7 +29,7 @@ def search(
     mode: str = typer.Option("hybrid", help="Search mode"),
 ):
     """
-        Searches a query against the knowledge base, and limits by k top results
+    Searches a query against the knowledge base, and limits by k top results
     """
     rprint(f"[bold green]✓[/] search knowledge base (query='{query}', top_k={top_k}, mode={mode})")
 
@@ -47,7 +37,7 @@ def search(
 @app.command()
 def chat():
     """
-        Opens an interactive chat repl 
+    Opens an interactive chat repl
     """
     rprint("[bold green]✓[/] starting interactive chat REPL")
 
@@ -58,7 +48,7 @@ def run_eval(
     report: bool = typer.Option(False, help="Generate evaluation report"),
 ):
     """
-        Runs the evaluation suite
+    Runs the evaluation suite
     """
     rprint(f"[bold green]✓[/] evaluation suite (run={run}, report={report})")
 
@@ -66,6 +56,6 @@ def run_eval(
 @app.command()
 def graph():
     """
-        Exports the multi agent graph as a mermaid diagram
+    Exports the multi agent graph as a mermaid diagram
     """
     rprint("[bold green]✓[/] exporting LangGraph as Mermaid")
