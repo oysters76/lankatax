@@ -2,8 +2,9 @@ from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL, URLCategory
+from lankatax_ai.backend.scraper.registry import ScrapableURL, URLCategory
 from lankatax_ai.backend.scraper.storage import DocumentRecord
+from lankatax_ai.backend.types import DocumentKind
 
 
 def make_scrapable_url_entry(**overrides) -> ScrapableURL:
