@@ -7,8 +7,9 @@ from rich.table import Table
 
 from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler, AsyncCrawlerFetchResult
+from lankatax_ai.backend.scraper.pdf_discovery import discover_pdf_links
 from lankatax_ai.backend.scraper.registry import URLRegistry
-from lankatax_ai.backend.scraper.storage import get_hash_map, get_scrape_status, save_documents
+from lankatax_ai.backend.scraper.storage import get_hash_map, get_known_urls, get_scrape_status, save_documents
 from lankatax_ai.backend.scraper.transform import to_document_record
 
 
@@ -16,6 +17,7 @@ def scrape(
     full: bool = typer.Option(False, "--full", help="Force re-ingest all"),
     list_urls: bool = typer.Option(False, "--list", help="Show registry URLs"),
     status: bool = typer.Option(False, "--status", help="Show scrape status"),
+    no_discover: bool = typer.Option(False, "--no-discover", help="Turn off auto-discovery of pdfs"),
 ):
     """Crawl ird.gov.lk — incremental by default, --full for all, --status for last run."""
     if list_urls:
@@ -23,7 +25,7 @@ def scrape(
     elif status:
         _show_status()
     else:
-        _do_scrape(full)
+        _do_scrape(full, no_discover)
 
 
 def _list_urls():
@@ -72,7 +74,7 @@ async def _show_status_async():
     await dispose_engine()
 
 
-def _do_scrape(full: bool = False):
+def _do_scrape(full: bool = False, no_discover: bool = False):
     registry = URLRegistry()
     metrics = {"succeeded": 0, "failed": 0}
     results = []
@@ -80,7 +82,10 @@ def _do_scrape(full: bool = False):
     total = len(registry.get_all())
 
     try:
-        asyncio.run(_do_scrape_async(registry, metrics, results))
+        asyncio.run(_do_scrape_async(registry.get_all(), metrics, results))
+        if not no_discover:
+            discovered = asyncio.run(_discover_and_crawl_pdfs(results, registry, metrics))
+            results.extend(discovered)
     except KeyboardInterrupt:
         interrupted = True
     _print_scrape_summary_table(metrics, len(results))
@@ -96,6 +101,51 @@ def _do_scrape(full: bool = False):
     if results:
         saved = asyncio.run(_save_and_dispose(results, full))
         Console().print(f"[green]Saved {saved} documents to DB[/green]")
+
+
+async def _discover_and_crawl_pdfs(
+    results: list[AsyncCrawlerFetchResult],
+    registry: URLRegistry,
+    metrics: dict[str, int],
+) -> list[AsyncCrawlerFetchResult]:
+    console = Console()
+
+    async with async_session() as session:
+        known = await get_known_urls(session)
+
+    registry_urls = {entry.url for entry in registry.get_all()}
+    discovered = discover_pdf_links(results, known, registry_urls)
+
+    if not discovered:
+        console.print("[dim]No new PDFs discovered.[/dim]")
+        await dispose_engine()
+        return []
+
+    console.print(f"[cyan]Discovered {len(discovered)} new PDFs — crawling...[/cyan]")
+
+    pdf_results: list[AsyncCrawlerFetchResult] = []
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+    ) as progress:
+        task = progress.add_task("Crawling discovered PDFs", total=len(discovered))
+
+        def on_result(result: AsyncCrawlerFetchResult) -> None:
+            pdf_results.append(result)
+            if result.is_error:
+                metrics["failed"] += 1
+            else:
+                metrics["succeeded"] += 1
+            progress.advance(task)
+
+        async with AsyncCrawler() as crawler:
+            await crawler.crawl_all(discovered, on_result=on_result)
+
+    await dispose_engine()
+    return pdf_results
 
 
 async def _save_and_dispose(results: list[AsyncCrawlerFetchResult], full: bool) -> int:
@@ -125,9 +175,8 @@ async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> i
 
 
 async def _do_scrape_async(
-    registry, metrics: dict[str, int], results: list[AsyncCrawlerFetchResult]
+    entries, metrics: dict[str, int], results: list[AsyncCrawlerFetchResult]
 ) -> None:
-    entries = registry.get_all()
     with Progress(
         SpinnerColumn(),
         TextColumn("[bold blue]{task.description}"),
