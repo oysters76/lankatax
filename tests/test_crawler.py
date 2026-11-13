@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pytest
 
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler

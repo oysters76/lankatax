@@ -6,6 +6,7 @@ import random
 import re
 from collections.abc import Callable
 from enum import Enum
+from typing import ClassVar, Self
 from urllib.parse import urljoin
 
 import httpx
@@ -58,7 +59,7 @@ class AsyncCrawlerFetchResult:
 
 
 class AsyncCrawler:
-    CONTENT_SELECTORS = [
+    CONTENT_SELECTORS: ClassVar[list[str]] = [
         "#ctl00_PlaceHolderMain",
         ".ms-rtestate-field",
         "#contentBox",
@@ -70,14 +71,14 @@ class AsyncCrawler:
         timeout: float = 10.0,
         connect: int = 5,
         retries: int = 3,
-        headers: dict[str:str] = {"User-Agent": "LankaTaxAI"},
+        headers: dict[str, str] | None = None,
         min_delay: float = 3,
         max_delay: float = 5,
     ):
         self._timeout_size = timeout
         self._connect = connect
         self._retries = retries
-        self._headers = headers
+        self._headers = headers or {"User-Agent": "LankaTaxAI"}
         self._timeout: httpx.Timeout | None = None
         self._transport: httpx.AsyncHTTPTransport | None = None
         self._client: httpx.AsyncClient | None = None
@@ -87,7 +88,7 @@ class AsyncCrawler:
 
         self._regex_heading = re.compile(r"^h[1-6]$")
 
-    async def __aenter__(self) -> AsyncCrawler:
+    async def __aenter__(self) -> Self:
         self._timeout = Timeout(self._timeout_size, connect=self._connect)
         self._transport = httpx.AsyncHTTPTransport(retries=self._retries)
         self._client = httpx.AsyncClient(
@@ -159,7 +160,7 @@ class AsyncCrawler:
                 response=None,
                 error=AsyncCrawlerErrorKind.retries_exhausted,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             return AsyncCrawlerResult(
                 url=url, status_code=-1, response=None, error=AsyncCrawlerErrorKind.exception
             )

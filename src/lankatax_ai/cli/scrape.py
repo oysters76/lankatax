@@ -9,7 +9,12 @@ from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler, AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.pdf_discovery import discover_pdf_links
 from lankatax_ai.backend.scraper.registry import URLRegistry
-from lankatax_ai.backend.scraper.storage import get_hash_map, get_known_urls, get_scrape_status, save_documents
+from lankatax_ai.backend.scraper.storage import (
+    get_hash_map,
+    get_known_urls,
+    get_scrape_status,
+    save_documents,
+)
 from lankatax_ai.backend.scraper.transform import to_document_record
 
 
@@ -17,7 +22,9 @@ def scrape(
     full: bool = typer.Option(False, "--full", help="Force re-ingest all"),
     list_urls: bool = typer.Option(False, "--list", help="Show registry URLs"),
     status: bool = typer.Option(False, "--status", help="Show scrape status"),
-    no_discover: bool = typer.Option(False, "--no-discover", help="Turn off auto-discovery of pdfs"),
+    no_discover: bool = typer.Option(
+        False, "--no-discover", help="Turn off auto-discovery of pdfs"
+    ),
 ):
     """Crawl ird.gov.lk — incremental by default, --full for all, --status for last run."""
     if list_urls:

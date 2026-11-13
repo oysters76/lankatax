@@ -25,8 +25,8 @@ async def test_upsert_updates_existing(clean_session):
 
     hashmap = await get_hash_map(clean_session)
 
-    assert drec1.url in hashmap.keys()
-    assert drec2.url in hashmap.keys()
+    assert drec1.url in hashmap
+    assert drec2.url in hashmap
     assert drec1.content_hash != hashmap[drec1.url].content_hash
     assert drec2.content_hash == hashmap[drec2.url].content_hash
 

@@ -1,4 +1,4 @@
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote, urlparse
 
 from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL
@@ -16,18 +16,24 @@ def discover_pdf_links(
     registry_urls: set[str],
 ) -> list[ScrapableURL]:
     pdf_links = []
-    seen = set() 
+    seen = set()
     for fr in fetch_results:
         if fr.parsed_page is None:
             continue
         for link in fr.parsed_page.pdf_links:
             if link in seen:
-                continue 
+                continue
             if link in known_urls:
                 continue
             if link in registry_urls:
                 continue
-            pdf_links.append(ScrapableURL(url=link, category=fr.entry.category, label=get_pdf_name_from_link(link), kind=DocumentKind.pdf))
-            seen.add(link) 
+            pdf_links.append(
+                ScrapableURL(
+                    url=link,
+                    category=fr.entry.category,
+                    label=get_pdf_name_from_link(link),
+                    kind=DocumentKind.pdf,
+                )
+            )
+            seen.add(link)
     return pdf_links
-            

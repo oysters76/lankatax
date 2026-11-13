@@ -1,8 +1,10 @@
 import dataclasses
-from uuid import UUID 
 from datetime import datetime
+from uuid import UUID
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 
 @dataclasses.dataclass
 class ScrapeStatusRecord:
@@ -25,10 +27,10 @@ class DocumentRecord:
     raw_text: str
     category: str
     content_hash: str
-    id: UUID | None = None 
+    id: UUID | None = None
     raw_html: str = ""
     document_kind: str = "page"
-    ingested_hash: str | None = None 
+    ingested_hash: str | None = None
 
 
 async def get_scrape_status(session: AsyncSession) -> ScrapeStatusRecord:
@@ -68,16 +70,17 @@ async def save_documents(session: AsyncSession, document_records: list[DocumentR
     await session.execute(text(query), params)
     await session.commit()
 
+
 async def get_document_by_id(session: AsyncSession, doc_id: UUID) -> DocumentRecord | None:
     query = """
         SELECT id, url, title, raw_text, category, content_hash, raw_html, document_kind, ingested_hash
         FROM documents where id = :doc_id 
     """
-    params = {"doc_id": doc_id} 
+    params = {"doc_id": doc_id}
     results = await session.execute(text(query), params)
     row = results.mappings().fetchone()
-    return None if row is None else DocumentRecord(**row) 
-    
+    return None if row is None else DocumentRecord(**row)
+
 
 async def get_pending_document_ids(session: AsyncSession) -> list[UUID]:
     query = """
@@ -85,22 +88,25 @@ async def get_pending_document_ids(session: AsyncSession) -> list[UUID]:
     WHERE ingested_hash IS NULL OR content_hash != ingested_hash 
     """
     results = await session.execute(text(query))
-    return [row["id"] for row in results.mappings().fetchall()] 
+    return [row["id"] for row in results.mappings().fetchall()]
+
 
 async def get_all_document_ids(session: AsyncSession) -> list[UUID]:
     query = """
     SELECT id FROM documents 
     """
     results = await session.execute(text(query))
-    return [row["id"] for row in results.mappings().fetchall()] 
+    return [row["id"] for row in results.mappings().fetchall()]
+
 
 async def update_ingested_hash(session: AsyncSession, doc_id: UUID, hash_val: str) -> None:
-    params = {"doc_id": doc_id, "hash_val": hash_val} 
+    params = {"doc_id": doc_id, "hash_val": hash_val}
     query = """
     UPDATE documents SET ingested_hash = :hash_val WHERE id = :doc_id 
     """
     await session.execute(text(query), params)
-    await session.commit() 
+    await session.commit()
+
 
 async def get_known_urls(session: AsyncSession) -> set[str]:
     query = """
@@ -108,4 +114,3 @@ async def get_known_urls(session: AsyncSession) -> set[str]:
     """
     results = await session.execute(text(query))
     return {row["url"] for row in results.mappings().fetchall()}
-    

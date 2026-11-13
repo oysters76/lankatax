@@ -1,5 +1,6 @@
 import hashlib
 
+
 def compute_hash(content: str | bytes) -> str:
     if isinstance(content, str):
         content = content.encode("utf-8")

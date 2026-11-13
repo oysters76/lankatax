@@ -2,11 +2,12 @@ import os
 
 os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
 
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
-from pathlib import Path
-from sqlalchemy import text, create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 SCHEMA_PATH = Path(__file__).parent.parent / "src/lankatax_ai/backend/db/init_schema.sql"
@@ -32,9 +33,11 @@ def async_engine(db_url):
         conn.execute(text(SCHEMA_PATH.read_text()))
         for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
             sql = migration.read_text().strip()
-            lines = [l.strip() for l in sql.splitlines() if l.strip() and not l.strip().startswith("--")]
+            lines = [
+                l.strip() for l in sql.splitlines() if l.strip() and not l.strip().startswith("--")
+            ]
             if not lines:
-                continue 
+                continue
             conn.execute(text(sql))
     sync_engine.dispose()
 
