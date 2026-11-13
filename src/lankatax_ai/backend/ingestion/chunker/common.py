@@ -4,12 +4,21 @@ from lankatax_ai.backend.ingestion.types import (
     ChunkConfig,
     RawBlock,
 )
+from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER_PATTERN
 from lankatax_ai.backend.scraper.storage import DocumentRecord
 from lankatax_ai.backend.types import DocumentKind
 
 
 def token_size(s: str) -> int:
     return len(s.split())
+
+
+def extract_pages_and_clean(text: str) -> tuple[int | None, int | None, str]:
+    pages = [int(p) for p in PAGE_MARKER_PATTERN.findall(text)]
+    cleaned = PAGE_MARKER_PATTERN.sub("", text)
+    page_start = pages[0] if pages else None
+    page_end = pages[-1] if pages else None
+    return page_start, page_end, cleaned.strip()
 
 
 def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) -> list[str]:
@@ -31,7 +40,12 @@ def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) ->
 
 
 def make_chunk(
-    content: str, doc: DocumentRecord, config: ChunkConfig, order: int, page: int | None = None
+    content: str,
+    doc: DocumentRecord,
+    config: ChunkConfig,
+    order: int,
+    page_start: int | None = None,
+    page_end: int | None = None,
 ) -> Chunk:
     return Chunk(
         content=content,
@@ -39,8 +53,9 @@ def make_chunk(
             from_url=doc.url,
             document_title=doc.title,
             document_kind=DocumentKind(doc.document_kind),
-            page_in_pdf=page,
             order=order,
+            page_start=page_start,
+            page_end=page_end,
         ),
         token_count=token_size(content),
         chunk_strategy=config.strategy,

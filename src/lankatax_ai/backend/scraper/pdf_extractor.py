@@ -1,8 +1,10 @@
 import io
+import re
 
 import pdfplumber
 
 PAGE_MARKER = "<!--PAGE:{n}-->"
+PAGE_MARKER_PATTERN = re.compile(r"<!--PAGE:(\d+)-->")
 
 
 def safe_str(s: str | None) -> str:

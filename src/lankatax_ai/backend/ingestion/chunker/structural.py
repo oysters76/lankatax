@@ -1,6 +1,10 @@
 from bs4 import BeautifulSoup as bs
 
-from lankatax_ai.backend.ingestion.chunker.common import make_chunk, merge_blocks_to_chunks
+from lankatax_ai.backend.ingestion.chunker.common import (
+    extract_pages_and_clean,
+    make_chunk,
+    merge_blocks_to_chunks,
+)
 from lankatax_ai.backend.ingestion.types import (
     BlockType,
     Chunk,
@@ -65,6 +69,10 @@ def chunk_structural(doc: DocumentRecord, config: ChunkConfig) -> list[Chunk]:
             RawBlock(block_type=BlockType.paragraph, content=p.strip()) for p in pages if p.strip()
         ]
         texts = merge_blocks_to_chunks([blocks], config)
-        return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
+        chunks = []
+        for i, t in enumerate(texts):
+            page_start, page_end, cleaned = extract_pages_and_clean(t)
+            chunks.append(make_chunk(cleaned, doc, config, i, page_start, page_end))
+        return chunks
     else:
         raise ValueError(f"Unknown document kind: {doc.document_kind}")

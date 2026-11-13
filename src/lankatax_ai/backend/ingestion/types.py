@@ -23,8 +23,9 @@ class ChunkCitationMeta:
     from_url: str
     document_title: str
     document_kind: DocumentKind
-    page_in_pdf: int | None = None
     order: int = 0
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 @dataclasses.dataclass
