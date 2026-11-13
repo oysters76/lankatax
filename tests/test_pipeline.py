@@ -35,7 +35,7 @@ async def test_ingest_document(clean_session):
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
 
-    chunk_count = await ingest_document(clean_session, doc, config, model)
+    chunk_count, _tokens = await ingest_document(clean_session, doc, config, model)
 
     assert chunk_count > 0
     result = await clean_session.execute(
@@ -62,7 +62,7 @@ async def test_ingest_document_replaces_old_chunks(clean_session):
     doc.raw_text = "Updated content about income tax rates and PAYE deductions."
     doc.raw_html = "<p>Updated content about income tax rates and PAYE deductions.</p>"
     doc.content_hash = "updated_hash"
-    second_count = await ingest_document(clean_session, doc, config, model)
+    second_count, _tokens = await ingest_document(clean_session, doc, config, model)
 
     result = await clean_session.execute(
         text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),

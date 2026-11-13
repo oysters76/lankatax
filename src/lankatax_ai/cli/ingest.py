@@ -90,8 +90,8 @@ async def _ingest_single(session, doc_id, config, model, console):
         return IngestionResult(errors=[f"Document {doc_id} not found"])
 
     console.print(f"Ingesting [cyan]{doc.title}[/cyan]...")
-    chunk_count = await ingest_document(session, doc, config, model)
-    return IngestionResult(docs_processed=1, chunks_created=chunk_count)
+    chunk_count, tokens_used = await ingest_document(session, doc, config, model)
+    return IngestionResult(docs_processed=1, chunks_created=chunk_count, tokens_used=tokens_used)
 
 
 async def _ingest_batch(session, config, model, console, mode):
@@ -123,6 +123,9 @@ def _print_summary(console, result):
 
     table.add_row("Documents processed", f"[green]{result.docs_processed}[/green]")
     table.add_row("Chunks created", f"[cyan]{result.chunks_created}[/cyan]")
+    table.add_row("Tokens used", f"[dim]{result.tokens_used:,}[/dim]")
+    cost = result.tokens_used * settings.embedding_cost_per_token
+    table.add_row("Estimated cost", f"[yellow]${cost:.6f}[/yellow]")
 
     if result.errors:
         table.add_row("Errors", f"[red]{len(result.errors)}[/red]")

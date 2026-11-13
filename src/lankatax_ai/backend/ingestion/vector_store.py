@@ -1,5 +1,4 @@
 import dataclasses
-import enum
 import json
 import uuid
 
@@ -7,13 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.ingestion.types import Chunk
-
-
-class _EnumEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, enum.Enum):
-            return o.value
-        return super().default(o)
+from lankatax_ai.backend.utils import EnumEncoder
 
 
 async def store_chunks(session: AsyncSession, document_id: uuid.UUID, chunks: list[Chunk]) -> None:
@@ -29,7 +22,7 @@ async def store_chunks(session: AsyncSession, document_id: uuid.UUID, chunks: li
                 "content": c.content,
                 "embedding": c.embedding,
                 "chunk_index": i,
-                "metadata_json": json.dumps(dataclasses.asdict(c.citation), cls=_EnumEncoder),
+                "metadata_json": json.dumps(dataclasses.asdict(c.citation), cls=EnumEncoder),
                 "token_count": c.token_count,
                 "chunk_strategy": c.chunk_strategy.value,
             },

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     google_api_key: SecretStr
     groq_api_key: SecretStr
 
+    # Embedding cost (text-embedding-3-small: $0.02 per 1M tokens)
+    embedding_cost_per_token: float = 0.02 / 1_000_000
+
     # LangSmith Observability
     langchain_api_key: SecretStr
     langchain_project: str

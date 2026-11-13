@@ -27,6 +27,7 @@ class IngestionResult:
     docs_processed: int = 0
     chunks_created: int = 0
     errors: list[str] = dataclasses.field(default_factory=list)
+    tokens_used: int = 0
 
 
 @dataclasses.dataclass
@@ -41,13 +42,14 @@ async def ingest_document(
     doc: DocumentRecord,
     config: ChunkConfig,
     model: OpenAIEmbeddings,
-) -> int:
+) -> tuple[int, int]:
     chunks = await chunk_document(doc, config, model)
     embedded = await embed_chunks(model, chunks)
+    tokens_used = sum([c.token_count for c in chunks])
     await delete_chunks_by_document_id(session, doc.id)
     await store_chunks(session, doc.id, embedded)
     await update_ingested_hash(session, doc.id, doc.content_hash)
-    return len(embedded)
+    return len(embedded), tokens_used
 
 
 async def _ingest_ids(
@@ -64,9 +66,10 @@ async def _ingest_ids(
             if doc is None:
                 result.errors.append(f"Document {doc_id} not found")
                 continue
-            chunk_count = await ingest_document(session, doc, config, model)
+            chunk_count, tokens_used = await ingest_document(session, doc, config, model)
             result.docs_processed += 1
             result.chunks_created += chunk_count
+            result.tokens_used += tokens_used
             if on_progress:
                 on_progress(doc_id, chunk_count)
         except Exception as e:  # noqa: BLE001
