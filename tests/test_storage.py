@@ -1,23 +1,9 @@
 from lankatax_ai.backend.scraper.storage import (
-    DocumentRecord,
     get_hash_map,
     get_scrape_status,
     save_documents,
 )
-
-
-def _make_record(**overrides) -> DocumentRecord:
-    """Helper to create a DocumentRecord with sensible defaults."""
-    defaults = {
-        "url": "https://www.ird.gov.lk/test",
-        "title": "Test Page",
-        "raw_text": "Some tax content",
-        "category": "tax_info",
-        "content_hash": "abc123",
-        "raw_html":"",
-        "document_kind": "page"
-    }
-    return DocumentRecord(**(defaults | overrides))
+from tests.helpers import make_document_record as _make_record
 
 
 async def test_save_and_retrieve(clean_session):

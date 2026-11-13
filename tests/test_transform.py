@@ -6,18 +6,9 @@ from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL, URLCategory
+from lankatax_ai.backend.scraper.registry import DocumentKind
 from lankatax_ai.backend.scraper.transform import to_document_record
-
-
-def _make_entry(**overrides) -> ScrapableURL:
-    defaults = {
-        "url": "https://www.ird.gov.lk/test",
-        "category": URLCategory.tax_info,
-        "label": "Test Page",
-        "kind": DocumentKind.page,
-    }
-    return ScrapableURL(**(defaults | overrides))
+from tests.helpers import make_scrapable_url_entry as _make_entry
 
 
 def test_error_result_returns_none():
