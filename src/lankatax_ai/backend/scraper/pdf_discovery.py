@@ -1,7 +1,8 @@
 from urllib.parse import unquote, urlparse
 
 from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
-from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL
+from lankatax_ai.backend.scraper.registry import ScrapableURL
+from lankatax_ai.backend.types import DocumentKind
 
 
 def get_pdf_name_from_link(url: str) -> str:

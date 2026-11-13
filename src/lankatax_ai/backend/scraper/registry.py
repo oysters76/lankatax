@@ -5,6 +5,8 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from rich import print as rprint
 
+from lankatax_ai.backend.types import DocumentKind
+
 _HERE = Path(__file__).parent
 _DEFAULT_REGISTRY = _HERE / "data" / "urls.json"
 
@@ -19,11 +21,6 @@ class URLCategory(Enum):
     schedule = "schedule"
     faq = "faq"
     notice = "notice"
-
-
-class DocumentKind(Enum):
-    pdf = "pdf"
-    page = "page"
 
 
 class ScrapableURL(BaseModel):

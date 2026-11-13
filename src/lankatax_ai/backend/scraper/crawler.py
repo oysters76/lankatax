@@ -13,7 +13,8 @@ import httpx
 from bs4 import BeautifulSoup as bs
 from httpx import Timeout
 
-from lankatax_ai.backend.scraper.registry import DocumentKind, ScrapableURL
+from lankatax_ai.backend.scraper.registry import ScrapableURL
+from lankatax_ai.backend.types import DocumentKind
 
 
 class AsyncCrawlerErrorKind(Enum):

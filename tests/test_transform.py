@@ -6,8 +6,8 @@ from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.registry import DocumentKind
 from lankatax_ai.backend.scraper.transform import to_document_record
+from lankatax_ai.backend.types import DocumentKind
 from tests.helpers import make_scrapable_url_entry as _make_entry
 
 
