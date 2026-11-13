@@ -1,9 +1,9 @@
 from bs4 import BeautifulSoup as bs
 
+from lankatax_ai.backend.ingestion.chunker.common import make_chunk, merge_blocks_to_chunks
 from lankatax_ai.backend.ingestion.types import (
     BlockType,
     Chunk,
-    ChunkCitationMeta,
     ChunkConfig,
     RawBlock,
 )
@@ -55,55 +55,16 @@ def group_blocks(blocks: list[RawBlock]) -> list[list[RawBlock]]:
     return groups
 
 
-def token_size(s: str) -> int:
-    return len(s.split())
-
-
-def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) -> list[str]:
-    current = ""
-    merged = []
-    for group in groups:
-        for block in group:
-            current_len = token_size(current)
-            is_over_limit = (current_len + token_size(block.content)) >= config.max_tokens
-            if not is_over_limit:
-                current += "\n" + block.content
-            else:
-                merged.append(current)
-                overlap = " ".join(current.split()[-config.overlap_tokens :])
-                current = overlap + "\n" + block.content
-    if current.strip():
-        merged.append(current)
-    return merged
-
-
-def _make_chunk(
-    content: str, doc: DocumentRecord, config: ChunkConfig, order: int, page: int | None = None
-) -> Chunk:
-    return Chunk(
-        content=content,
-        citation=ChunkCitationMeta(
-            from_url=doc.url,
-            document_title=doc.title,
-            document_kind=DocumentKind(doc.document_kind),
-            page_in_pdf=page,
-            order=order,
-        ),
-        token_count=token_size(content),
-        chunk_strategy=config.strategy,
-    )
-
-
-def chunk_document(doc: DocumentRecord, config: ChunkConfig) -> list[Chunk]:
+def chunk_structural(doc: DocumentRecord, config: ChunkConfig) -> list[Chunk]:
     if doc.document_kind == DocumentKind.page.value:
         texts = merge_blocks_to_chunks(group_blocks(parse_html_to_blocks(doc.raw_html)), config)
-        return [_make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
+        return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
     elif doc.document_kind == DocumentKind.pdf.value:
         pages = doc.raw_text.split(PAGE_MARKER.split("{")[0])
         blocks = [
             RawBlock(block_type=BlockType.paragraph, content=p.strip()) for p in pages if p.strip()
         ]
         texts = merge_blocks_to_chunks([blocks], config)
-        return [_make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
+        return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
     else:
         raise ValueError(f"Unknown document kind: {doc.document_kind}")
