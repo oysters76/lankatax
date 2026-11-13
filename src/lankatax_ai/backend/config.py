@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # Embedding cost (text-embedding-3-small: $0.02 per 1M tokens)
     embedding_cost_per_token: float = 0.02 / 1_000_000
 
+    # Default chunking strategy (structural, semantic, recursive)
+    chunk_strategy: str = "structural"
+
     # LangSmith Observability
     langchain_api_key: SecretStr
     langchain_project: str

@@ -26,7 +26,9 @@ def ingest(
     all_docs: bool = typer.Option(False, "--all-docs", help="Re-ingest all documents"),
     document_id: str = typer.Option(None, "--document-id", help="Ingest a specific document by ID"),
     strategy: str = typer.Option(
-        "structural", "--strategy", help=f"Chunking strategy ({', '.join(STRATEGY_CHOICES)})"
+        settings.chunk_strategy,
+        "--strategy",
+        help=f"Chunking strategy ({', '.join(STRATEGY_CHOICES)})",
     ),
     status: bool = typer.Option(False, "--status", help="Show ingestion status"),
 ):
