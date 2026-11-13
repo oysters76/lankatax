@@ -1,3 +1,8 @@
+from lankatax_ai.backend.ingestion.types import (
+    Chunk,
+    ChunkCitationMeta,
+    ChunkStrategy,
+)
 from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
@@ -46,3 +51,19 @@ def make_pdf_result(url, pdf_bytes=b"%PDF-fake", category=URLCategory.tax_info):
         entry=ScrapableURL(url=url, category=category, label="Test PDF", kind=DocumentKind.pdf),
         pdf_bytes=pdf_bytes,
     )
+
+
+def make_chunk(**overrides) -> Chunk:
+    defaults = {
+        "content": "Sample tax content about PAYE deductions.",
+        "citation": ChunkCitationMeta(
+            from_url="https://www.ird.gov.lk/test",
+            document_title="Test Page",
+            document_kind=DocumentKind.page,
+            order=0,
+        ),
+        "token_count": 6,
+        "chunk_strategy": ChunkStrategy.structural,
+        "embedding": [0.1] * 1536,
+    }
+    return Chunk(**(defaults | overrides))

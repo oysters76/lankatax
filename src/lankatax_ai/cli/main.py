@@ -1,25 +1,12 @@
 import typer
 from rich import print as rprint
 
+from lankatax_ai.cli.ingest import ingest
 from lankatax_ai.cli.scrape import scrape
 
 app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipeline")
 app.command()(scrape)
-
-
-@app.command()
-def ingest(
-    all_docs: bool = typer.Option(False, help="Ingest all documents"),
-    pending: bool = typer.Option(True, help="Ingest only pending documents"),
-    document_id: str = typer.Option(None, help="Ingest a specific document by ID"),
-):
-    """
-    Ingests documents into the pipeline or a specific document
-    """
-    rprint(
-        f"[bold green]✓[/] ingest documents "
-        f"(all={all_docs} pending={pending}, document_id={document_id})"
-    )
+app.command()(ingest)
 
 
 @app.command()

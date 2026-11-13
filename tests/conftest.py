@@ -42,7 +42,15 @@ def async_engine(db_url):
     sync_engine.dispose()
 
     # Create and yield the async engine
+    from pgvector.asyncpg import register_vector
+    from sqlalchemy import event as sa_event
+
     engine = create_async_engine(db_url.replace("psycopg2", "asyncpg"), echo=True)
+
+    @sa_event.listens_for(engine.sync_engine, "connect")
+    def _register_vector(dbapi_conn, connection_record):
+        dbapi_conn.run_async(register_vector)
+
     yield engine
 
     # Properly close async engine connection pools on test suite exit
