@@ -7,6 +7,7 @@ from lankatax_ai.backend.types import DocumentKind
 class ChunkStrategy(Enum):
     structural = "structural"
     semantic = "semantic"
+    recursive = "recursive"
 
 
 class BlockType(Enum):
