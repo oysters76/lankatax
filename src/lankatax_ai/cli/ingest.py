@@ -16,20 +16,30 @@ from lankatax_ai.backend.ingestion.pipeline import (
     ingest_document,
     ingest_pending,
 )
-from lankatax_ai.backend.ingestion.types import ChunkConfig
+from lankatax_ai.backend.ingestion.types import ChunkConfig, ChunkStrategy
 from lankatax_ai.backend.scraper.storage import get_document_by_id
+
+STRATEGY_CHOICES = [s.value for s in ChunkStrategy]
 
 
 def ingest(
     all_docs: bool = typer.Option(False, "--all-docs", help="Re-ingest all documents"),
     document_id: str = typer.Option(None, "--document-id", help="Ingest a specific document by ID"),
+    strategy: str = typer.Option(
+        "structural", "--strategy", help=f"Chunking strategy ({', '.join(STRATEGY_CHOICES)})"
+    ),
     status: bool = typer.Option(False, "--status", help="Show ingestion status"),
 ):
     """Chunk, embed and store documents into pgvector."""
     if status:
         _show_status()
     else:
-        _do_ingest(all_docs=all_docs, document_id=document_id)
+        if strategy not in STRATEGY_CHOICES:
+            Console().print(
+                f"[red]Unknown strategy '{strategy}'. Choose from: {', '.join(STRATEGY_CHOICES)}[/red]"
+            )
+            raise typer.Exit(1)
+        _do_ingest(all_docs=all_docs, document_id=document_id, strategy=strategy)
 
 
 def _show_status():
@@ -56,20 +66,20 @@ async def _show_status_async():
     await dispose_engine()
 
 
-def _do_ingest(all_docs: bool, document_id: str | None):
+def _do_ingest(all_docs: bool, document_id: str | None, strategy: str):
     try:
-        asyncio.run(_do_ingest_async(all_docs, document_id))
+        asyncio.run(_do_ingest_async(all_docs, document_id, strategy))
     except KeyboardInterrupt:
         Console().print("[bold yellow]Ingestion interrupted.[/bold yellow]")
 
 
-async def _do_ingest_async(all_docs: bool, document_id: str | None):
+async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: str):
     console = Console()
     model = OpenAIEmbeddings(
         model="text-embedding-3-small",
         api_key=settings.openai_api_key.get_secret_value(),
     )
-    config = ChunkConfig()
+    config = ChunkConfig(strategy=ChunkStrategy(strategy))
 
     async with async_session() as session:
         if document_id:
