@@ -60,6 +60,8 @@ def test_page_result_converts():
     assert record.raw_text == "Income tax is charged on all persons."
     assert record.category == "tax_info"
     assert record.content_hash == compute_hash("Income tax is charged on all persons.")
+    assert record.raw_html != ""
+    assert record.document_kind == "page"
 
 
 @patch("lankatax_ai.backend.scraper.transform.pdf_to_text", return_value="Extracted PDF text")
@@ -78,6 +80,8 @@ def test_pdf_result_converts(mock_pdf):
     assert record.title == "Tax Guide"
     assert record.raw_text == "Extracted PDF text"
     assert record.content_hash == compute_hash(pdf_bytes)
+    assert record.raw_html == ""
+    assert record.document_kind == "pdf"
     mock_pdf.assert_called_once_with(pdf_bytes)
 
 

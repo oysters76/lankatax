@@ -14,6 +14,8 @@ def _make_record(**overrides) -> DocumentRecord:
         "raw_text": "Some tax content",
         "category": "tax_info",
         "content_hash": "abc123",
+        "raw_html":"",
+        "document_kind": "page"
     }
     return DocumentRecord(**(defaults | overrides))
 

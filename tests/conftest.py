@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from testcontainers.community.postgres import PostgresContainer
 
 SCHEMA_PATH = Path(__file__).parent.parent / "src/lankatax_ai/backend/db/init_schema.sql"
+MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 
 @pytest.fixture(scope="session")
@@ -29,6 +30,12 @@ def async_engine(db_url):
     sync_engine = create_engine(db_url)
     with sync_engine.begin() as conn:
         conn.execute(text(SCHEMA_PATH.read_text()))
+        for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            sql = migration.read_text().strip()
+            lines = [l.strip() for l in sql.splitlines() if l.strip() and not l.strip().startswith("--")]
+            if not lines:
+                continue 
+            conn.execute(text(sql))
     sync_engine.dispose()
 
     # Create and yield the async engine

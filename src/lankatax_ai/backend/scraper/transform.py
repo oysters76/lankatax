@@ -15,6 +15,9 @@ def to_document_record(result: AsyncCrawlerFetchResult) -> DocumentRecord | None
             raw_text=result.parsed_page.text,
             category=result.entry.category.value,
             content_hash=compute_hash(result.parsed_page.text),
+            raw_html=result.parsed_page.raw_html,
+            document_kind=result.entry.kind.value,
+            ingested_hash=None
         )
 
     if result.pdf_bytes is not None:
@@ -24,6 +27,9 @@ def to_document_record(result: AsyncCrawlerFetchResult) -> DocumentRecord | None
             raw_text=pdf_to_text(result.pdf_bytes),
             category=result.entry.category.value,
             content_hash=compute_hash(result.pdf_bytes),
+            raw_html="",
+            document_kind=result.entry.kind.value,
+            ingested_hash=None
         )
 
     return None
