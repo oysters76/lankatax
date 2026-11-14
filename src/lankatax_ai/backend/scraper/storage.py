@@ -63,7 +63,6 @@ async def save_documents(session: AsyncSession, documents: list[Document]):
             },
         )
         await session.execute(stmt)
-    await session.commit()
 
 
 async def get_document_by_id(session: AsyncSession, doc_id: UUID) -> Document | None:
@@ -87,7 +86,6 @@ async def get_all_document_ids(session: AsyncSession) -> list[UUID]:
 async def update_ingested_hash(session: AsyncSession, doc_id: UUID, hash_val: str) -> None:
     stmt = update(Document).where(Document.id == doc_id).values(ingested_hash=hash_val)
     await session.execute(stmt)
-    await session.commit()
 
 
 async def get_known_urls(session: AsyncSession) -> set[str]:

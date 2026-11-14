@@ -23,6 +23,7 @@ def _make_mock_model():
 async def _insert_doc(session, **overrides):
     doc = make_document(**overrides)
     await save_documents(session, [doc])
+    await session.commit()
     doc_id = (
         await session.execute(select(Document.id).where(Document.url == doc.url))
     ).scalar_one()

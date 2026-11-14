@@ -15,6 +15,7 @@ from tests.helpers import make_chunk, make_document
 async def _insert_doc(session, **overrides):
     doc = make_document(**overrides)
     await save_documents(session, [doc])
+    await session.commit()
     row = (await session.execute(select(Document.id).where(Document.url == doc.url))).scalar_one()
     return row
 

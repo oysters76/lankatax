@@ -49,6 +49,7 @@ async def ingest_document(
     await delete_chunks_by_document_id(session, doc.id)
     await store_chunks(session, doc.id, embedded)
     await update_ingested_hash(session, doc.id, doc.content_hash)
+    await session.commit()
     return len(embedded), tokens_used
 
 

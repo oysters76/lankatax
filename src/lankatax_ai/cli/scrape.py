@@ -176,6 +176,7 @@ async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> i
         if not to_save:
             return 0
         await save_documents(session, to_save)
+        await session.commit()
     return len(to_save)
 
 
