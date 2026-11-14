@@ -15,7 +15,7 @@ from lankatax_ai.backend.scraper.storage import (
     get_scrape_status,
     save_documents,
 )
-from lankatax_ai.backend.scraper.transform import to_document_record
+from lankatax_ai.backend.scraper.transform import to_document
 
 
 def scrape(
@@ -162,7 +162,7 @@ async def _save_and_dispose(results: list[AsyncCrawlerFetchResult], full: bool) 
 
 
 async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> int:
-    records = [r for r in (to_document_record(res) for res in results) if r is not None]
+    records = [r for r in (to_document(res) for res in results) if r is not None]
     if not records:
         return 0
     async with async_session() as session:
@@ -171,9 +171,7 @@ async def _save_results(results: list[AsyncCrawlerFetchResult], full: bool) -> i
         else:
             hash_map = await get_hash_map(session)
             to_save = [
-                r
-                for r in records
-                if r.url not in hash_map or r.content_hash != hash_map[r.url].content_hash
+                r for r in records if r.url not in hash_map or r.content_hash != hash_map[r.url]
             ]
         if not to_save:
             return 0

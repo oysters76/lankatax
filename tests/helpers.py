@@ -1,3 +1,4 @@
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.types import (
     Chunk,
     ChunkCitationMeta,
@@ -8,7 +9,6 @@ from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerParsedPage,
 )
 from lankatax_ai.backend.scraper.registry import ScrapableURL, URLCategory
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 from lankatax_ai.backend.types import DocumentKind
 
 
@@ -22,7 +22,7 @@ def make_scrapable_url_entry(**overrides) -> ScrapableURL:
     return ScrapableURL(**(defaults | overrides))
 
 
-def make_document_record(**overrides) -> DocumentRecord:
+def make_document(**overrides) -> Document:
     defaults = {
         "url": "https://www.ird.gov.lk/test",
         "title": "Test Page",
@@ -32,7 +32,7 @@ def make_document_record(**overrides) -> DocumentRecord:
         "raw_html": "",
         "document_kind": "page",
     }
-    return DocumentRecord(**(defaults | overrides))
+    return Document(**(defaults | overrides))
 
 
 def make_html_result(url, pdf_links=None, category=URLCategory.tax_info):

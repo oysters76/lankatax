@@ -6,12 +6,14 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import create_engine, text
+from alembic.config import Config as AlembicConfig
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
-SCHEMA_PATH = Path(__file__).parent.parent / "src/lankatax_ai/backend/db/init_schema.sql"
-MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+from alembic import command as alembic_command
+
+ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
 
 
 @pytest.fixture(scope="session")
@@ -27,34 +29,14 @@ def db_url(pg_container):
 
 @pytest.fixture(scope="session")
 def async_engine(db_url):
-    # Synchronously seed the database schema
-    sync_engine = create_engine(db_url)
-    with sync_engine.begin() as conn:
-        conn.execute(text(SCHEMA_PATH.read_text()))
-        for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
-            sql = migration.read_text().strip()
-            lines = [
-                l.strip() for l in sql.splitlines() if l.strip() and not l.strip().startswith("--")
-            ]
-            if not lines:
-                continue
-            conn.execute(text(sql))
-    sync_engine.dispose()
-
-    # Create and yield the async engine
-    from pgvector.asyncpg import register_vector
-    from sqlalchemy import event as sa_event
+    alembic_cfg = AlembicConfig(str(ALEMBIC_INI))
+    alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+    alembic_command.upgrade(alembic_cfg, "head")
 
     engine = create_async_engine(db_url.replace("psycopg2", "asyncpg"), echo=True)
 
-    @sa_event.listens_for(engine.sync_engine, "connect")
-    def _register_vector(dbapi_conn, connection_record):
-        dbapi_conn.run_async(register_vector)
-
     yield engine
 
-    # Properly close async engine connection pools on test suite exit
-    # (Since this is a synchronous fixture, we don't await engine.dispose())
     engine.sync_engine.dispose()
 
 
@@ -68,7 +50,9 @@ async def session(async_engine):
 @pytest_asyncio.fixture(loop_scope="session")
 async def clean_session(async_engine):
     """Per-test session that rolls back after each test — no data leaks."""
+    from lankatax_ai.backend.db.models import Document
+
     async with AsyncSession(async_engine) as session:
-        await session.execute(text("DELETE FROM documents"))
+        await session.execute(delete(Document))
         await session.commit()
         yield session

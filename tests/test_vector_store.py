@@ -1,5 +1,7 @@
-from sqlalchemy import text
+from sqlalchemy import func, select
 
+from lankatax_ai.backend.db.models import Chunk as ChunkModel
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.vector_store import (
     delete_chunks_by_document_id,
     delete_chunks_by_url,
@@ -7,14 +9,14 @@ from lankatax_ai.backend.ingestion.vector_store import (
     store_chunks,
 )
 from lankatax_ai.backend.scraper.storage import save_documents
-from tests.helpers import make_chunk, make_document_record
+from tests.helpers import make_chunk, make_document
 
 
 async def _insert_doc(session, **overrides):
-    doc = make_document_record(**overrides)
+    doc = make_document(**overrides)
     await save_documents(session, [doc])
-    row = await session.execute(text("SELECT id FROM documents WHERE url = :url"), {"url": doc.url})
-    return row.mappings().fetchone()["id"]
+    row = (await session.execute(select(Document.id).where(Document.url == doc.url))).scalar_one()
+    return row
 
 
 async def test_store_and_count_chunks(clean_session):
@@ -23,11 +25,12 @@ async def test_store_and_count_chunks(clean_session):
     await store_chunks(clean_session, doc_id, chunks)
     await clean_session.commit()
 
-    result = await clean_session.execute(
-        text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),
-        {"id": doc_id},
-    )
-    assert result.mappings().fetchone()["cnt"] == 3
+    cnt = (
+        await clean_session.execute(
+            select(func.count()).select_from(ChunkModel).where(ChunkModel.document_id == doc_id)
+        )
+    ).scalar_one()
+    assert cnt == 3
 
 
 async def test_store_chunks_empty_list(clean_session):
@@ -35,11 +38,12 @@ async def test_store_chunks_empty_list(clean_session):
     await store_chunks(clean_session, doc_id, [])
     await clean_session.commit()
 
-    result = await clean_session.execute(
-        text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),
-        {"id": doc_id},
-    )
-    assert result.mappings().fetchone()["cnt"] == 0
+    cnt = (
+        await clean_session.execute(
+            select(func.count()).select_from(ChunkModel).where(ChunkModel.document_id == doc_id)
+        )
+    ).scalar_one()
+    assert cnt == 0
 
 
 async def test_delete_chunks_by_document_id(clean_session):
@@ -52,11 +56,12 @@ async def test_delete_chunks_by_document_id(clean_session):
     await clean_session.commit()
     assert deleted == 3
 
-    result = await clean_session.execute(
-        text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),
-        {"id": doc_id},
-    )
-    assert result.mappings().fetchone()["cnt"] == 0
+    cnt = (
+        await clean_session.execute(
+            select(func.count()).select_from(ChunkModel).where(ChunkModel.document_id == doc_id)
+        )
+    ).scalar_one()
+    assert cnt == 0
 
 
 async def test_delete_chunks_by_url(clean_session):

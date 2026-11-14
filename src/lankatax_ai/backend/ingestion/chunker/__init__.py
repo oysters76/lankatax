@@ -1,14 +1,14 @@
 from langchain_openai import OpenAIEmbeddings
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.recursive import chunk_recursive
 from lankatax_ai.backend.ingestion.chunker.semantic import chunk_semantic
 from lankatax_ai.backend.ingestion.chunker.structural import chunk_structural
 from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig, ChunkStrategy
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 
 
 async def chunk_document(
-    doc: DocumentRecord, config: ChunkConfig, model: OpenAIEmbeddings | None = None
+    doc: Document, config: ChunkConfig, model: OpenAIEmbeddings | None = None
 ) -> list[Chunk]:
     if config.strategy == ChunkStrategy.structural:
         return chunk_structural(doc, config)

@@ -3,9 +3,9 @@ import re
 
 from langchain_openai import OpenAIEmbeddings
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.common import extract_pages_and_clean, make_chunk
 from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 
 
 def dot(a: list[float], b: list[float]) -> float:
@@ -43,7 +43,7 @@ def _append_chunk(
     sentences: list[str],
     start: int,
     end: int,
-    doc: DocumentRecord,
+    doc: Document,
     config: ChunkConfig,
     chunks: list[Chunk],
 ) -> None:
@@ -55,7 +55,7 @@ def _append_chunk(
 
 
 async def chunk_semantic(
-    doc: DocumentRecord, config: ChunkConfig, model: OpenAIEmbeddings
+    doc: Document, config: ChunkConfig, model: OpenAIEmbeddings
 ) -> list[Chunk]:
     sentences = split_sentences(doc.raw_text)
     if not sentences:

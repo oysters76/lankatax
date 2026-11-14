@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup as bs
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.common import (
     extract_pages_and_clean,
     make_chunk,
@@ -12,7 +13,6 @@ from lankatax_ai.backend.ingestion.types import (
     RawBlock,
 )
 from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 from lankatax_ai.backend.types import DocumentKind
 
 RAW_BLOCK_MAP: dict[str, BlockType] = {
@@ -59,7 +59,7 @@ def group_blocks(blocks: list[RawBlock]) -> list[list[RawBlock]]:
     return groups
 
 
-def chunk_structural(doc: DocumentRecord, config: ChunkConfig) -> list[Chunk]:
+def chunk_structural(doc: Document, config: ChunkConfig) -> list[Chunk]:
     if doc.document_kind == DocumentKind.page.value:
         texts = merge_blocks_to_chunks(group_blocks(parse_html_to_blocks(doc.raw_html)), config)
         return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]

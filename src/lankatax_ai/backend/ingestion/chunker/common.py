@@ -1,3 +1,4 @@
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.types import (
     Chunk,
     ChunkCitationMeta,
@@ -5,7 +6,6 @@ from lankatax_ai.backend.ingestion.types import (
     RawBlock,
 )
 from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER_PATTERN
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 from lankatax_ai.backend.types import DocumentKind
 
 
@@ -41,7 +41,7 @@ def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) ->
 
 def make_chunk(
     content: str,
-    doc: DocumentRecord,
+    doc: Document,
     config: ChunkConfig,
     order: int,
     page_start: int | None = None,

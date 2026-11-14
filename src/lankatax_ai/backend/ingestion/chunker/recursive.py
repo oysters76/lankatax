@@ -1,11 +1,11 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.common import extract_pages_and_clean, make_chunk
 from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
-from lankatax_ai.backend.scraper.storage import DocumentRecord
 
 
-def chunk_recursive(doc: DocumentRecord, config: ChunkConfig) -> list[Chunk]:
+def chunk_recursive(doc: Document, config: ChunkConfig) -> list[Chunk]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.max_tokens * 4,
         chunk_overlap=config.overlap_tokens * 4,

@@ -6,7 +6,7 @@ from lankatax_ai.backend.scraper.crawler import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.transform import to_document_record
+from lankatax_ai.backend.scraper.transform import to_document
 from lankatax_ai.backend.types import DocumentKind
 from tests.helpers import make_scrapable_url_entry as _make_entry
 
@@ -18,7 +18,7 @@ def test_error_result_returns_none():
         entry=_make_entry(),
         error=AsyncCrawlerErrorKind.not_found,
     )
-    assert to_document_record(result) is None
+    assert to_document(result) is None
 
 
 def test_no_page_no_pdf_returns_none():
@@ -27,7 +27,7 @@ def test_no_page_no_pdf_returns_none():
         url="https://www.ird.gov.lk/empty",
         entry=_make_entry(),
     )
-    assert to_document_record(result) is None
+    assert to_document(result) is None
 
 
 def test_page_result_converts():
@@ -43,7 +43,7 @@ def test_page_result_converts():
         entry=_make_entry(),
         parsed_page=page,
     )
-    record = to_document_record(result)
+    record = to_document(result)
 
     assert record is not None
     assert record.url == "https://www.ird.gov.lk/income-tax"
@@ -64,7 +64,7 @@ def test_pdf_result_converts(mock_pdf):
         entry=_make_entry(kind=DocumentKind.pdf, label="Tax Guide"),
         pdf_bytes=pdf_bytes,
     )
-    record = to_document_record(result)
+    record = to_document(result)
 
     assert record is not None
     assert record.url == "https://www.ird.gov.lk/guide.pdf"
@@ -90,7 +90,7 @@ def test_page_takes_priority_over_pdf():
         parsed_page=page,
         pdf_bytes=b"%PDF-also-here",
     )
-    record = to_document_record(result)
+    record = to_document(result)
 
     assert record is not None
     assert record.title == "Page Title"

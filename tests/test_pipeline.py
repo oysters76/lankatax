@@ -1,7 +1,9 @@
 from unittest.mock import AsyncMock
 
-from sqlalchemy import text
+from sqlalchemy import func, select, update
 
+from lankatax_ai.backend.db.models import Chunk as ChunkModel
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.pipeline import (
     get_ingestion_status,
     ingest_document,
@@ -9,7 +11,7 @@ from lankatax_ai.backend.ingestion.pipeline import (
 )
 from lankatax_ai.backend.ingestion.types import ChunkConfig, ChunkStrategy
 from lankatax_ai.backend.scraper.storage import get_document_by_id, save_documents
-from tests.helpers import make_document_record
+from tests.helpers import make_document
 
 
 def _make_mock_model():
@@ -19,10 +21,11 @@ def _make_mock_model():
 
 
 async def _insert_doc(session, **overrides):
-    doc = make_document_record(**overrides)
+    doc = make_document(**overrides)
     await save_documents(session, [doc])
-    row = await session.execute(text("SELECT id FROM documents WHERE url = :url"), {"url": doc.url})
-    doc_id = row.mappings().fetchone()["id"]
+    doc_id = (
+        await session.execute(select(Document.id).where(Document.url == doc.url))
+    ).scalar_one()
     return await get_document_by_id(session, doc_id)
 
 
@@ -32,20 +35,23 @@ async def test_ingest_document(clean_session):
         raw_text="PAYE tax is deducted by employer. Employees must file returns.",
         raw_html="<p>PAYE tax is deducted by employer. Employees must file returns.</p>",
     )
+    doc_id = doc.id
+    doc_hash = doc.content_hash
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
 
     chunk_count, _tokens = await ingest_document(clean_session, doc, config, model)
 
     assert chunk_count > 0
-    result = await clean_session.execute(
-        text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),
-        {"id": doc.id},
-    )
-    assert result.mappings().fetchone()["cnt"] == chunk_count
+    cnt = (
+        await clean_session.execute(
+            select(func.count()).select_from(ChunkModel).where(ChunkModel.document_id == doc_id)
+        )
+    ).scalar_one()
+    assert cnt == chunk_count
 
-    refreshed = await get_document_by_id(clean_session, doc.id)
-    assert refreshed.ingested_hash == doc.content_hash
+    refreshed = await get_document_by_id(clean_session, doc_id)
+    assert refreshed.ingested_hash == doc_hash
 
 
 async def test_ingest_document_replaces_old_chunks(clean_session):
@@ -54,21 +60,24 @@ async def test_ingest_document_replaces_old_chunks(clean_session):
         raw_text="Original content about VAT rates.",
         raw_html="<p>Original content about VAT rates.</p>",
     )
+    doc_id = doc.id
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
 
     await ingest_document(clean_session, doc, config, model)
 
+    doc = await get_document_by_id(clean_session, doc_id)
     doc.raw_text = "Updated content about income tax rates and PAYE deductions."
     doc.raw_html = "<p>Updated content about income tax rates and PAYE deductions.</p>"
     doc.content_hash = "updated_hash"
     second_count, _tokens = await ingest_document(clean_session, doc, config, model)
 
-    result = await clean_session.execute(
-        text("SELECT COUNT(*) AS cnt FROM chunks WHERE document_id = :id"),
-        {"id": doc.id},
-    )
-    assert result.mappings().fetchone()["cnt"] == second_count
+    cnt = (
+        await clean_session.execute(
+            select(func.count()).select_from(ChunkModel).where(ChunkModel.document_id == doc_id)
+        )
+    ).scalar_one()
+    assert cnt == second_count
 
 
 async def test_ingest_pending_skips_ingested(clean_session):
@@ -85,8 +94,7 @@ async def test_ingest_pending_skips_ingested(clean_session):
         raw_html="<p>Already ingested content.</p>",
     )
     await clean_session.execute(
-        text("UPDATE documents SET ingested_hash = content_hash WHERE id = :id"),
-        {"id": doc2.id},
+        update(Document).where(Document.id == doc2.id).values(ingested_hash=doc2.content_hash)
     )
     await clean_session.commit()
 
@@ -123,8 +131,7 @@ async def test_get_ingestion_status(clean_session):
         raw_html="<p>Ingested.</p>",
     )
     await clean_session.execute(
-        text("UPDATE documents SET ingested_hash = content_hash WHERE id = :id"),
-        {"id": doc2.id},
+        update(Document).where(Document.id == doc2.id).values(ingested_hash=doc2.content_hash)
     )
     await clean_session.commit()
 

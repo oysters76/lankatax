@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    "alembic>=1.15",
     "apscheduler>=3.11.3",
     "asyncpg>=0.32.0",
     "beautifulsoup4>=4.15.0",

@@ -3,9 +3,10 @@ from collections.abc import Callable
 from uuid import UUID
 
 from langchain_openai import OpenAIEmbeddings
-from sqlalchemy import text
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker import chunk_document
 from lankatax_ai.backend.ingestion.embedder import embed_chunks
 from lankatax_ai.backend.ingestion.types import ChunkConfig
@@ -14,7 +15,6 @@ from lankatax_ai.backend.ingestion.vector_store import (
     store_chunks,
 )
 from lankatax_ai.backend.scraper.storage import (
-    DocumentRecord,
     get_all_document_ids,
     get_document_by_id,
     get_pending_document_ids,
@@ -39,7 +39,7 @@ class IngestionStatusRecord:
 
 async def ingest_document(
     session: AsyncSession,
-    doc: DocumentRecord,
+    doc: Document,
     config: ChunkConfig,
     model: OpenAIEmbeddings,
 ) -> tuple[int, int]:
@@ -98,13 +98,17 @@ async def ingest_all(
 
 
 async def get_ingestion_status(session: AsyncSession) -> IngestionStatusRecord:
-    query = text("""
-        SELECT
-            COUNT(*) AS total_documents,
-            COUNT(CASE WHEN ingested_hash IS NOT NULL AND content_hash = ingested_hash THEN 1 END) AS ingested,
-            COUNT(CASE WHEN ingested_hash IS NULL OR content_hash != ingested_hash THEN 1 END) AS pending
-        FROM documents
-    """)
-    result = await session.execute(query)
-    row = result.mappings().fetchone()
-    return IngestionStatusRecord(**row)
+    is_ingested = Document.ingested_hash.is_not(None) & (
+        Document.content_hash == Document.ingested_hash
+    )
+    stmt = select(
+        func.count().label("total_documents"),
+        func.count(case((is_ingested, 1))).label("ingested"),
+        func.count(case((~is_ingested, 1))).label("pending"),
+    )
+    row = (await session.execute(stmt)).one()
+    return IngestionStatusRecord(
+        total_documents=row.total_documents,
+        ingested=row.ingested,
+        pending=row.pending,
+    )
