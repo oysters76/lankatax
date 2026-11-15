@@ -17,11 +17,13 @@ logger = logging.getLogger(__name__)
 class HybridRetriever:
     CANDIDATE_MULTIPLIER: int = 4
     KEYWORD_SEARCH_THRESHOLD = 0.05
-    VECTOR_WEIGHT = 0.7
 
-    def __init__(self, session: AsyncSession, embed_model: OpenAIEmbeddings):
+    def __init__(
+        self, session: AsyncSession, embed_model: OpenAIEmbeddings, *, vector_weight: float = 0.7
+    ):
         self.session = session
         self.embed_model = embed_model
+        self.vector_weight = vector_weight
 
     async def search(
         self,
@@ -144,7 +146,7 @@ class HybridRetriever:
         for r in merged.values():
             vs = r.vector_score or 0.0
             ks = r.keyword_score or 0.0
-            r.score = (self.VECTOR_WEIGHT * vs) + ((1 - self.VECTOR_WEIGHT) * ks)
+            r.score = (self.vector_weight * vs) + ((1 - self.vector_weight) * ks)
 
         logger.debug(
             "Merge: %d vector + %d keyword → %d unique",

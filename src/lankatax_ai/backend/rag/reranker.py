@@ -22,9 +22,10 @@ Text: {text}"""
 class Reranker:
     SEMAPHORE_LIMIT: int = 5
 
-    def __init__(self, llm: BaseChatModel):
+    def __init__(self, llm: BaseChatModel, *, threshold: int = 3):
         self._llm = llm
         self._structured_llm = self._llm.with_structured_output(RelevanceScore)
+        self._threshold = threshold
 
     def _build_prompt(self, query: str, result: RetrievalResult) -> str:
         # TODO: replace with versioned YAML prompt from prompt_loader
@@ -50,7 +51,12 @@ class Reranker:
             sem = asyncio.Semaphore(self.SEMAPHORE_LIMIT)
             scored = list(await asyncio.gather(*[self._score_one(query, r, sem) for r in results]))
             scored.sort(key=lambda s: s.score, reverse=True)
-            reranked = [dataclasses.replace(s.result, score=s.score) for s in scored[:top_k]]
+            threshold_norm = self._threshold / 10.0
+            reranked = [
+                dataclasses.replace(s.result, score=s.score)
+                for s in scored[:top_k]
+                if s.score >= threshold_norm
+            ]
             logger.info(
                 "Reranked: top score=%.2f, bottom score=%.2f",
                 reranked[0].score if reranked else 0.0,
