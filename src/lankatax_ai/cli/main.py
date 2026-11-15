@@ -1,3 +1,5 @@
+import logging
+
 import typer
 from rich import print as rprint
 
@@ -5,6 +7,16 @@ from lankatax_ai.cli.ingest import ingest
 from lankatax_ai.cli.scrape import scrape
 
 app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipeline")
+
+
+@app.callback()
+def main(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+):
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+
 app.command()(scrape)
 app.command()(ingest)
 

@@ -1,3 +1,5 @@
+import logging
+
 from bs4 import BeautifulSoup as bs
 
 from lankatax_ai.backend.db.models import Document
@@ -31,6 +33,8 @@ RAW_BLOCK_MAP: dict[str, BlockType] = {
 
 ANCHOR_BLOCK_TYPES: set[BlockType] = {BlockType.heading}
 
+logger = logging.getLogger(__name__)
+
 
 def parse_html_to_blocks(raw_html: str) -> list[RawBlock]:
     soup = bs(raw_html, "html.parser")
@@ -60,8 +64,12 @@ def group_blocks(blocks: list[RawBlock]) -> list[list[RawBlock]]:
 
 
 def chunk_structural(doc: Document, config: ChunkConfig) -> list[Chunk]:
+    logger.debug("Structural chunking %s (kind=%s)", doc.url, doc.document_kind)
     if doc.document_kind == DocumentKind.page.value:
-        texts = merge_blocks_to_chunks(group_blocks(parse_html_to_blocks(doc.raw_html)), config)
+        blocks = parse_html_to_blocks(doc.raw_html)
+        groups = group_blocks(blocks)
+        logger.debug("Parsed %d blocks into %d groups", len(blocks), len(groups))
+        texts = merge_blocks_to_chunks(groups, config)
         return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
     elif doc.document_kind == DocumentKind.pdf.value:
         pages = doc.raw_text.split(PAGE_MARKER.split("{")[0])

@@ -1,3 +1,5 @@
+import logging
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,6 +23,9 @@ class Settings(BaseSettings):
     # Default chunking strategy (structural, semantic, recursive)
     chunk_strategy: str = "structural"
 
+    # Logging
+    log_level: str = "INFO"
+
     # LangSmith Observability
     langchain_api_key: SecretStr
     langchain_project: str
@@ -36,3 +41,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)

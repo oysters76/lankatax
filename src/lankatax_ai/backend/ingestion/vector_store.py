@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import logging
 import uuid
 
 from sqlalchemy import delete, select
@@ -9,6 +10,8 @@ from lankatax_ai.backend.db.models import Chunk as ChunkModel
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.types import Chunk
 from lankatax_ai.backend.utils import EnumEncoder
+
+logger = logging.getLogger(__name__)
 
 
 async def store_chunks(session: AsyncSession, document_id: uuid.UUID, chunks: list[Chunk]) -> None:
@@ -25,10 +28,12 @@ async def store_chunks(session: AsyncSession, document_id: uuid.UUID, chunks: li
         for i, c in enumerate(chunks)
     ]
     session.add_all(models)
+    logger.debug("Stored %d chunks for doc %s", len(models), document_id)
 
 
 async def delete_chunks_by_document_id(session: AsyncSession, document_id: uuid.UUID) -> int:
     result = await session.execute(delete(ChunkModel).where(ChunkModel.document_id == document_id))
+    logger.debug("Deleted %d chunks for doc %s", result.rowcount, document_id)
     return result.rowcount
 
 

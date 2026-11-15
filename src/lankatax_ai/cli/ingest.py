@@ -31,6 +31,7 @@ def ingest(
         help=f"Chunking strategy ({', '.join(STRATEGY_CHOICES)})",
     ),
     status: bool = typer.Option(False, "--status", help="Show ingestion status"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show per-document details"),
 ):
     """Chunk, embed and store documents into pgvector."""
     if status:
@@ -41,7 +42,7 @@ def ingest(
                 f"[red]Unknown strategy '{strategy}'. Choose from: {', '.join(STRATEGY_CHOICES)}[/red]"
             )
             raise typer.Exit(1)
-        _do_ingest(all_docs=all_docs, document_id=document_id, strategy=strategy)
+        _do_ingest(all_docs=all_docs, document_id=document_id, strategy=strategy, verbose=verbose)
 
 
 def _show_status():
@@ -68,14 +69,14 @@ async def _show_status_async():
     await dispose_engine()
 
 
-def _do_ingest(all_docs: bool, document_id: str | None, strategy: str):
+def _do_ingest(all_docs: bool, document_id: str | None, strategy: str, verbose: bool = False):
     try:
-        asyncio.run(_do_ingest_async(all_docs, document_id, strategy))
+        asyncio.run(_do_ingest_async(all_docs, document_id, strategy, verbose))
     except KeyboardInterrupt:
         Console().print("[bold yellow]Ingestion interrupted.[/bold yellow]")
 
 
-async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: str):
+async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: str, verbose: bool):
     console = Console()
     model = OpenAIEmbeddings(
         model="text-embedding-3-small",
@@ -87,9 +88,13 @@ async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: st
         if document_id:
             result = await _ingest_single(session, UUID(document_id), config, model, console)
         elif all_docs:
-            result = await _ingest_batch(session, config, model, console, mode="all")
+            result = await _ingest_batch(
+                session, config, model, console, mode="all", verbose=verbose
+            )
         else:
-            result = await _ingest_batch(session, config, model, console, mode="pending")
+            result = await _ingest_batch(
+                session, config, model, console, mode="pending", verbose=verbose
+            )
 
     _print_summary(console, result)
     await dispose_engine()
@@ -106,7 +111,7 @@ async def _ingest_single(session, doc_id, config, model, console):
     return IngestionResult(docs_processed=1, chunks_created=chunk_count, tokens_used=tokens_used)
 
 
-async def _ingest_batch(session, config, model, console, mode):
+async def _ingest_batch(session, config, model, console, mode, verbose=False):
     fn = ingest_all if mode == "all" else ingest_pending
     label = "all documents" if mode == "all" else "pending documents"
 
@@ -119,7 +124,15 @@ async def _ingest_batch(session, config, model, console, mode):
     ) as progress:
         task = progress.add_task(f"Ingesting {label}", total=None)
 
-        def on_progress(doc_id: UUID, chunk_count: int) -> None:
+        def on_progress(
+            doc_id: UUID, chunk_count: int, title: str, tokens: int, error: str | None
+        ) -> None:
+            if error:
+                progress.console.print(f"  [red]FAIL[/red] {title} — {error}")
+            elif verbose:
+                progress.console.print(
+                    f"  [green] OK [/green] {title} — {chunk_count} chunks, {tokens:,} tokens"
+                )
             progress.advance(task)
 
         result = await fn(session, config, model, on_progress=on_progress)

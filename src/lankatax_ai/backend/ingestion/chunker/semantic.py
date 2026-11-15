@@ -1,11 +1,15 @@
+import logging
 import math
 import re
+import time
 
 from langchain_openai import OpenAIEmbeddings
 
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.common import extract_pages_and_clean, make_chunk
 from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
+
+logger = logging.getLogger(__name__)
 
 
 def dot(a: list[float], b: list[float]) -> float:
@@ -58,10 +62,16 @@ async def chunk_semantic(
     doc: Document, config: ChunkConfig, model: OpenAIEmbeddings
 ) -> list[Chunk]:
     sentences = split_sentences(doc.raw_text)
+    logger.debug("Semantic chunking %s — %d sentences", doc.url, len(sentences))
     if not sentences:
+        logger.warning("No sentences found for %s, skipping", doc.url)
         return []
+    t0 = time.perf_counter()
     embeddings: list[list[float]] = await model.aembed_documents(sentences)
+    elapsed = time.perf_counter() - t0
+    logger.debug("Sentence embeddings for %s took %.2fs", doc.url, elapsed)
     boundaries = find_boundaries(embeddings)
+    logger.debug("Found %d semantic boundaries", len(boundaries))
     chunks: list[Chunk] = []
     start = 0
     for boundary in boundaries:

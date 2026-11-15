@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from collections.abc import Callable
 from uuid import UUID
 
@@ -20,6 +21,8 @@ from lankatax_ai.backend.scraper.storage import (
     get_pending_document_ids,
     update_ingested_hash,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -43,13 +46,16 @@ async def ingest_document(
     config: ChunkConfig,
     model: OpenAIEmbeddings,
 ) -> tuple[int, int]:
+    logger.info("Ingesting doc %s — %s", doc.id, doc.title or doc.url)
     chunks = await chunk_document(doc, config, model)
     embedded = await embed_chunks(model, chunks)
     tokens_used = sum([c.token_count for c in chunks])
-    await delete_chunks_by_document_id(session, doc.id)
+    deleted = await delete_chunks_by_document_id(session, doc.id)
+    logger.debug("Deleted %d old chunks for doc %s", deleted, doc.id)
     await store_chunks(session, doc.id, embedded)
     await update_ingested_hash(session, doc.id, doc.content_hash)
     await session.commit()
+    logger.info("Done doc %s — %d chunks, %d tokens", doc.id, len(embedded), tokens_used)
     return len(embedded), tokens_used
 
 
@@ -58,23 +64,36 @@ async def _ingest_ids(
     doc_ids: list[UUID],
     config: ChunkConfig,
     model: OpenAIEmbeddings,
-    on_progress: Callable[[UUID, int], None] | None = None,
+    on_progress: Callable[[UUID, int, str, int, str | None], None] | None = None,
 ) -> IngestionResult:
+    logger.info("Starting ingestion of %d documents", len(doc_ids))
     result = IngestionResult()
     for doc_id in doc_ids:
         try:
             doc = await get_document_by_id(session, doc_id)
             if doc is None:
+                logger.warning("Document %s not found, skipping", doc_id)
                 result.errors.append(f"Document {doc_id} not found")
+                if on_progress:
+                    on_progress(doc_id, 0, str(doc_id), 0, "not found")
                 continue
             chunk_count, tokens_used = await ingest_document(session, doc, config, model)
             result.docs_processed += 1
             result.chunks_created += chunk_count
             result.tokens_used += tokens_used
             if on_progress:
-                on_progress(doc_id, chunk_count)
-        except Exception as e:  # noqa: BLE001
+                on_progress(doc_id, chunk_count, doc.title or doc.url, tokens_used, None)
+        except Exception as e:
+            logger.exception("Failed to ingest doc %s", doc_id)
             result.errors.append(f"{doc_id}: {e}")
+            if on_progress:
+                on_progress(doc_id, 0, str(doc_id), 0, str(e))
+    logger.info(
+        "Ingestion complete — %d docs, %d chunks, %d tokens",
+        result.docs_processed,
+        result.chunks_created,
+        result.tokens_used,
+    )
     return result
 
 
@@ -85,6 +104,7 @@ async def ingest_pending(
     on_progress: Callable[[UUID, int], None] | None = None,
 ) -> IngestionResult:
     doc_ids = await get_pending_document_ids(session)
+    logger.info("Found %d pending documents", len(doc_ids))
     return await _ingest_ids(session, doc_ids, config, model, on_progress)
 
 
@@ -95,6 +115,7 @@ async def ingest_all(
     on_progress: Callable[[UUID, int], None] | None = None,
 ) -> IngestionResult:
     doc_ids = await get_all_document_ids(session)
+    logger.info("Found %d total documents", len(doc_ids))
     return await _ingest_ids(session, doc_ids, config, model, on_progress)
 
 
