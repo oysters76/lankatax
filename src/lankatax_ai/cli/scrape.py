@@ -144,8 +144,10 @@ async def _discover_and_crawl_pdfs(
             pdf_results.append(result)
             if result.is_error:
                 metrics["failed"] += 1
+                progress.console.print(f"  [red]FAIL[/red] {result.url}")
             else:
                 metrics["succeeded"] += 1
+                progress.console.print(f"  [green] OK [/green] {result.url}")
             progress.advance(task)
 
         async with AsyncCrawler() as crawler:
@@ -196,8 +198,10 @@ async def _do_scrape_async(
             results.append(result)
             if result.is_error:
                 metrics["failed"] += 1
+                progress.console.print(f"  [red]FAIL[/red] {result.url}")
             else:
                 metrics["succeeded"] += 1
+                progress.console.print(f"  [green] OK [/green] {result.url}")
             progress.advance(task)
 
         async with AsyncCrawler() as crawler:
