@@ -11,10 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 class ContextBuilder:
-    def __init__(self, token_budget: int = 3000, dedup_threshold: float = 0.6):
+    def __init__(
+        self,
+        token_budget: int = 3000,
+        dedup_threshold: float = 0.6,
+        embedding_model: str = "text-embedding-3-small",
+    ):
         self.token_budget = token_budget
         self.dedup_threshold = dedup_threshold
-        self._encoder = tiktoken.encoding_for_model("text-embedding-3-small")
+        self._embedding_model = embedding_model
+        self._encoder = tiktoken.encoding_for_model(embedding_model)
 
     def build(self, results: list[RetrievalResult]) -> str:
         deduped = self._deduplicate(results)
