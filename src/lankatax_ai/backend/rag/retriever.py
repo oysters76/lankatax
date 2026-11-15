@@ -30,6 +30,7 @@ class HybridRetriever:
         mode: SearchMode = SearchMode.hybrid,
         top_k: int = 5,
         category: str | None = None,
+        include_embeddings: bool = False,
     ) -> list[RetrievalResult]:
         logger.info(
             "Search query=%r mode=%s top_k=%d category=%s", query, mode.value, top_k, category
@@ -41,13 +42,17 @@ class HybridRetriever:
 
         if mode == SearchMode.hybrid:
             pool = top_k * self.CANDIDATE_MULTIPLIER
-            vector_results = await self._vector_search(query_embedding, pool, category)
-            keyword_results = await self._keyword_search(query, pool, category)
+            vector_results = await self._vector_search(
+                query_embedding, pool, category, include_embeddings
+            )
+            keyword_results = await self._keyword_search(query, pool, category, include_embeddings)
             results = self._merge_results(vector_results, keyword_results)
         elif mode == SearchMode.vector:
-            results = await self._vector_search(query_embedding, top_k, category)
+            results = await self._vector_search(
+                query_embedding, top_k, category, include_embeddings
+            )
         elif mode == SearchMode.keyword:
-            results = await self._keyword_search(query, top_k, category)
+            results = await self._keyword_search(query, top_k, category, include_embeddings)
         else:
             raise ValueError(f"Unknown search mode: {mode}")
 
@@ -60,16 +65,18 @@ class HybridRetriever:
         return results
 
     async def _vector_search(
-        self, embedding: list[float], top_k: int, category: str | None
+        self,
+        embedding: list[float],
+        top_k: int,
+        category: str | None,
+        include_embeddings: bool = False,
     ) -> list[RetrievalResult]:
         distance = Chunk.embedding.cosine_distance(embedding).label("distance")
-        stmt = select(
-            Chunk.id,
-            Chunk.document_id,
-            Chunk.content,
-            Chunk.metadata_json,
-            distance,
-        )
+        columns = [Chunk.id, Chunk.document_id, Chunk.content, Chunk.metadata_json, distance]
+        if include_embeddings:
+            columns.append(Chunk.embedding)
+        stmt = select(*columns)
+
         if category is not None:
             stmt = stmt.join(Document, Chunk.document_id == Document.id)
             stmt = stmt.where(Document.category == category)
@@ -86,21 +93,19 @@ class HybridRetriever:
                 vector_score=max(0.0, 1.0 - row["distance"]),
                 keyword_score=None,
                 metadata=row["metadata_json"] or {},
+                embedding=list(row["embedding"]) if include_embeddings else None,
             )
             for row in rows
         ]
 
     async def _keyword_search(
-        self, query: str, top_k: int, category: str | None
+        self, query: str, top_k: int, category: str | None, include_embeddings: bool = False
     ) -> list[RetrievalResult]:
         sim = func.similarity(Chunk.content, query).label("sim")
-        stmt = select(
-            Chunk.id,
-            Chunk.document_id,
-            Chunk.content,
-            Chunk.metadata_json,
-            sim,
-        )
+        columns = [Chunk.id, Chunk.document_id, Chunk.content, Chunk.metadata_json, sim]
+        if include_embeddings:
+            columns.append(Chunk.embedding)
+        stmt = select(*columns)
 
         if category is not None:
             stmt = stmt.join(Document, Chunk.document_id == Document.id)
@@ -120,6 +125,7 @@ class HybridRetriever:
                 vector_score=None,
                 keyword_score=float(row["sim"]),
                 metadata=row["metadata_json"] or {},
+                embedding=list(row["embedding"]) if include_embeddings else None,
             )
             for row in rows
         ]

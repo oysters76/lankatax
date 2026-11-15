@@ -5,21 +5,10 @@ import dataclasses
 import logging
 
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, Field
 
-from lankatax_ai.backend.rag.types import RetrievalResult
+from lankatax_ai.backend.rag.types import RelevanceScore, RerankScorerResult, RetrievalResult
 
 logger = logging.getLogger(__name__)
-
-
-class RelevanceScore(BaseModel):
-    score: int = Field(description="Relevance score from 1 to 10")
-
-
-@dataclasses.dataclass
-class _ScoredResult:
-    result: RetrievalResult
-    score: float
 
 
 RERANK_PROMPT = """Rate how relevant the following text is to answering the query.
@@ -43,11 +32,11 @@ class Reranker:
 
     async def _score_one(
         self, query: str, result: RetrievalResult, sem: asyncio.Semaphore
-    ) -> _ScoredResult:
+    ) -> RerankScorerResult:
         async with sem:
             prompt = self._build_prompt(query, result)
             response = await self._structured_llm.ainvoke(prompt)
-            return _ScoredResult(result=result, score=response.score / 10.0)
+            return RerankScorerResult(result=result, score=response.score / 10.0)
 
     async def rerank(
         self,
