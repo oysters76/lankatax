@@ -66,5 +66,18 @@ class ContextBuilder:
     def _format_chunk(self, result: RetrievalResult) -> str:
         title = result.metadata.get("document_title", "Unknown")
         url = result.metadata.get("from_url", "")
-        source_line = f"[Source: {title}, {url}]" if url else f"[Source: {title}]"
+        kind = result.metadata.get("document_kind", "page")
+        page_start = result.metadata.get("page_start")
+        page_end = result.metadata.get("page_end")
+
+        parts = [title]
+        if kind == "pdf" and page_start is not None:
+            if page_end and page_end != page_start:
+                parts.append(f"p.{page_start}-{page_end}")
+            else:
+                parts.append(f"p.{page_start}")
+        if url:
+            parts.append(url)
+
+        source_line = f"[Source: {', '.join(parts)}]"
         return f"{source_line}\n{result.content}"
