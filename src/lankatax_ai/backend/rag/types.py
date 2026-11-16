@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from abc import ABC, abstractmethod
 from enum import Enum
 from uuid import UUID
 
@@ -51,3 +52,32 @@ class PreprocessedQuery:
     original: str
     expanded: str
     query_type: QueryType
+
+
+@dataclasses.dataclass
+class CacheStats:
+    total_entries: int
+    total_hits: int
+    hit_rate: float
+    oldest_entry_hours: float
+
+
+class ResultCacheBase(ABC):
+    @abstractmethod
+    async def get(
+        self, query_text: str, query_embedding: list[float]
+    ) -> list[RetrievalResult] | None: ...
+
+    @abstractmethod
+    async def put(
+        self, query_text: str, query_embedding: list[float], results: list[RetrievalResult]
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_stats(self) -> CacheStats: ...
+
+    @abstractmethod
+    async def clear(self) -> int: ...
+
+    @abstractmethod
+    async def invalidate_expired(self) -> int: ...
