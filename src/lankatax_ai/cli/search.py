@@ -19,11 +19,32 @@ from lankatax_ai.backend.rag.result_cache import PgResultCache
 from lankatax_ai.backend.rag.retriever import HybridRetriever
 from lankatax_ai.backend.rag.search_analytics import SearchAnalytics, SearchTiming
 from lankatax_ai.backend.rag.types import SearchMode
-from lankatax_ai.backend.types import LlmProvider
+from lankatax_ai.backend.types import DocumentKind, LlmProvider
 from lankatax_ai.backend.utils import merge_result_sets
 from lankatax_ai.cli.state import cli_state
 
 console = Console()
+
+
+def _parse_date(value: str | None) -> date_type | None:
+    if value is None:
+        return None
+    try:
+        return date_type.fromisoformat(value)
+    except ValueError:
+        raise typer.BadParameter(f"Invalid date: {value!r}. Use YYYY-MM-DD.")
+
+
+def _parse_doc_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        DocumentKind(value)
+    except ValueError:
+        raise typer.BadParameter(
+            f"Invalid doc type: {value!r}. Choose from {[k.value for k in DocumentKind]}."
+        )
+    return value
 
 
 def _build_llm() -> BaseChatModel:
@@ -52,13 +73,17 @@ def search(
     mode: str = typer.Option("hybrid", "--mode", "-m", help="Search mode: hybrid, vector, keyword"),
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by tax category"),
     doc_type: str | None = typer.Option(
-        None, "--doc-type", "-d", help="Filter by document type: pdf, page"
+        None,
+        "--doc-type",
+        "-d",
+        callback=_parse_doc_type,
+        help="Filter by document type: pdf, page",
     ),
     after: str | None = typer.Option(
-        None, "--after", help="Filter docs scraped after date (YYYY-MM-DD)"
+        None, "--after", callback=_parse_date, help="Filter docs scraped after date (YYYY-MM-DD)"
     ),
     before: str | None = typer.Option(
-        None, "--before", help="Filter docs scraped before date (YYYY-MM-DD)"
+        None, "--before", callback=_parse_date, help="Filter docs scraped before date (YYYY-MM-DD)"
     ),
     rerank: bool = typer.Option(False, "--rerank", "-r", help="Enable LLM reranking"),
     context: bool = typer.Option(False, "--context", help="Show assembled context window"),
@@ -83,12 +108,7 @@ def search(
         console.print(f"[red]Invalid mode: {mode}. Use hybrid, vector, or keyword.[/red]")
         raise typer.Exit(1)
 
-    filters = MetadataFilters(
-        category=category,
-        doc_type=doc_type,
-        after=date_type.fromisoformat(after) if after else None,
-        before=date_type.fromisoformat(before) if before else None,
-    )
+    filters = MetadataFilters(category=category, doc_type=doc_type, after=after, before=before)
 
     asyncio.run(_search_async(query, search_mode, filters, rerank, context, no_cache, multi_query))
 
