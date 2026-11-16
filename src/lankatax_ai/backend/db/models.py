@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Numeric, Text, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -198,5 +198,7 @@ class SearchLog(Base):
     latency_rerank_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_total_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     llm_provider: Mapped[str | None] = mapped_column(llm_provider_enum, nullable=True)
+    cache_hit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    multi_query: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     source: Mapped[str] = mapped_column(search_source_enum, nullable=False, server_default="'cli'")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")

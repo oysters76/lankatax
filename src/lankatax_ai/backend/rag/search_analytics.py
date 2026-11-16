@@ -42,6 +42,8 @@ class SearchStats:
     hit_rate: float
     no_result_queries: list[str]
     avg_top_score: float
+    cache_hit_count: int
+    multi_query_count: int
 
 
 class SearchAnalytics:
@@ -59,6 +61,8 @@ class SearchAnalytics:
         result_count: int,
         timing: SearchTiming,
         llm_provider: LlmProvider | None = None,
+        cache_hit: bool = False,
+        multi_query: bool = False,
         source: SearchSource = SearchSource.cli,
     ) -> None:
         """Persist one search event to the search_logs table."""
@@ -74,6 +78,8 @@ class SearchAnalytics:
             latency_rerank_ms=timing.rerank_ms,
             latency_total_ms=timing.total_ms,
             llm_provider=llm_provider.value if llm_provider else None,
+            cache_hit=cache_hit,
+            multi_query=multi_query,
             source=source.value,
         )
         self._session.add(entry)
@@ -94,6 +100,8 @@ class SearchAnalytics:
                         func.count().label("total"),
                         func.avg(SearchLog.latency_total_ms).label("avg_latency"),
                         func.avg(SearchLog.top_score).label("avg_score"),
+                        func.count().filter(SearchLog.cache_hit.is_(True)).label("cache_hits"),
+                        func.count().filter(SearchLog.multi_query.is_(True)).label("multi_queries"),
                     )
                 )
             )
@@ -109,6 +117,8 @@ class SearchAnalytics:
                 hit_rate=0.0,
                 no_result_queries=[],
                 avg_top_score=0.0,
+                cache_hit_count=0,
+                multi_query_count=0,
             )
 
         # no-result queries: top_score below threshold or zero results
@@ -143,4 +153,6 @@ class SearchAnalytics:
             hit_rate=hit_count / total if total else 0.0,
             no_result_queries=list(no_result_rows),
             avg_top_score=float(summary["avg_score"] or 0),
+            cache_hit_count=summary["cache_hits"],
+            multi_query_count=summary["multi_queries"],
         )
