@@ -43,13 +43,22 @@ def _build_llm() -> BaseChatModel:
 
 
 def search(
-    query: str = typer.Argument(..., help="Search query text"),
+    query: str = typer.Argument(None, help="Search query text"),
     mode: str = typer.Option("hybrid", "--mode", "-m", help="Search mode: hybrid, vector, keyword"),
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by tax category"),
     rerank: bool = typer.Option(False, "--rerank", "-r", help="Enable LLM reranking"),
     context: bool = typer.Option(False, "--context", help="Show assembled context window"),
+    stats: bool = typer.Option(False, "--stats", help="Show search analytics"),
 ):
     """Search the tax knowledge base."""
+    if stats:
+        _show_stats()
+        return
+
+    if not query:
+        console.print("[red]Query is required unless using --stats.[/red]")
+        raise typer.Exit(1)
+
     try:
         search_mode = SearchMode(mode)
     except ValueError:
@@ -57,6 +66,43 @@ def search(
         raise typer.Exit(1)
 
     asyncio.run(_search_async(query, search_mode, category, rerank, context))
+
+
+def _show_stats():
+    asyncio.run(_show_stats_async())
+
+
+async def _show_stats_async():
+    async with async_session() as session:
+        analytics = SearchAnalytics(session)
+        stats = await analytics.get_stats()
+    await dispose_engine()
+
+    if stats.total_queries == 0:
+        console.print("[yellow]No search logs yet.[/yellow]")
+        return
+
+    table = Table(title="Search Analytics", show_lines=False, padding=(0, 2))
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+
+    table.add_row("Total queries", f"[cyan]{stats.total_queries}[/cyan]")
+    table.add_row("Avg latency", f"[dim]{stats.avg_latency_ms:.0f}ms[/dim]")
+    table.add_row("Avg top score", f"[dim]{stats.avg_top_score:.3f}[/dim]")
+    hit_color = "green" if stats.hit_rate >= 0.8 else "yellow" if stats.hit_rate >= 0.5 else "red"
+    table.add_row("Hit rate", f"[{hit_color}]{stats.hit_rate:.1%}[/{hit_color}]")
+
+    console.print(table)
+
+    if stats.no_result_queries:
+        fail_table = Table(title="Top Failed Queries", show_lines=False, padding=(0, 2))
+        fail_table.add_column("#", style="dim", width=3, justify="right")
+        fail_table.add_column("Query", style="red")
+
+        for i, q in enumerate(stats.no_result_queries, 1):
+            fail_table.add_row(str(i), q)
+
+        console.print(fail_table)
 
 
 async def _search_async(
