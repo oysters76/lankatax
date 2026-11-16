@@ -17,6 +17,16 @@ def fuzzy_match(term: str, candidates: list[str], *, cutoff: float = 0.6) -> str
     return matches[0] if matches else None
 
 
+def merge_result_sets(result_sets: list[list]) -> list:
+    """Merge multiple retrieval result sets, deduplicate by chunk_id, keep highest score."""
+    seen: dict = {}
+    for result_set in result_sets:
+        for r in result_set:
+            if r.chunk_id not in seen or r.score > seen[r.chunk_id].score:
+                seen[r.chunk_id] = r
+    return sorted(seen.values(), key=lambda r: r.score, reverse=True)
+
+
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     a_arr = np.array(a)
     b_arr = np.array(b)
