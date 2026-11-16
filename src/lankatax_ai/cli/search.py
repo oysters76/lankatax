@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import date as date_type
 
 import typer
 from langchain_core.language_models import BaseChatModel
@@ -10,6 +11,7 @@ from rich.table import Table
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
+from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.multi_query_retriever import MultiQueryExpander
 from lankatax_ai.backend.rag.query_preprocessor import QueryPreprocessor
 from lankatax_ai.backend.rag.reranker import Reranker
@@ -49,6 +51,15 @@ def search(
     query: str = typer.Argument(None, help="Search query text"),
     mode: str = typer.Option("hybrid", "--mode", "-m", help="Search mode: hybrid, vector, keyword"),
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by tax category"),
+    doc_type: str | None = typer.Option(
+        None, "--doc-type", "-d", help="Filter by document type: pdf, page"
+    ),
+    after: str | None = typer.Option(
+        None, "--after", help="Filter docs scraped after date (YYYY-MM-DD)"
+    ),
+    before: str | None = typer.Option(
+        None, "--before", help="Filter docs scraped before date (YYYY-MM-DD)"
+    ),
     rerank: bool = typer.Option(False, "--rerank", "-r", help="Enable LLM reranking"),
     context: bool = typer.Option(False, "--context", help="Show assembled context window"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Bypass semantic cache"),
@@ -72,7 +83,14 @@ def search(
         console.print(f"[red]Invalid mode: {mode}. Use hybrid, vector, or keyword.[/red]")
         raise typer.Exit(1)
 
-    asyncio.run(_search_async(query, search_mode, category, rerank, context, no_cache, multi_query))
+    filters = MetadataFilters(
+        category=category,
+        doc_type=doc_type,
+        after=date_type.fromisoformat(after) if after else None,
+        before=date_type.fromisoformat(before) if before else None,
+    )
+
+    asyncio.run(_search_async(query, search_mode, filters, rerank, context, no_cache, multi_query))
 
 
 def _show_stats():
@@ -120,7 +138,7 @@ async def _show_stats_async():
 async def _search_async(
     query: str,
     mode: SearchMode,
-    category: str | None,
+    filters: MetadataFilters,
     do_rerank: bool,
     show_context: bool,
     no_cache: bool = False,
@@ -163,7 +181,7 @@ async def _search_async(
                         q,
                         mode=mode,
                         top_k=top_k,
-                        category=category,
+                        filters=filters,
                         include_embeddings=show_context,
                     )
                     for q in all_queries
@@ -179,7 +197,7 @@ async def _search_async(
                     processed_query.expanded,
                     mode=mode,
                     top_k=top_k,
-                    category=category,
+                    filters=filters,
                     include_embeddings=show_context,
                 )
                 search_end_timing = time.perf_counter()
