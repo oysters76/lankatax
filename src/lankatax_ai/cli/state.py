@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Self
 
-LLM_PROVIDERS = frozenset({"gemini", "groq"})
-
-MODEL_TOKEN_BUDGETS: dict[str, int] = {
-    "gemini": 4000,
-    "groq": 2500,
-}
+from lankatax_ai.backend.types import MODEL_TOKEN_BUDGETS, LlmProvider
 
 
 class CLIState:
@@ -16,7 +11,7 @@ class CLIState:
     def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._llm_provider = "gemini"
+            cls._llm_provider = LlmProvider.gemini
             cls._token_budget: int | None = None
             cls._rerank_threshold = 3
             cls._vector_weight = 0.7
@@ -25,15 +20,18 @@ class CLIState:
         return cls._instance
 
     @property
-    def llm_provider(self) -> str:
+    def llm_provider(self) -> LlmProvider:
         return self._llm_provider
 
     @llm_provider.setter
-    def llm_provider(self, value: str) -> None:
-        if value not in LLM_PROVIDERS:
-            raise ValueError(
-                f"Unknown LLM provider: {value!r}. Choose from {sorted(LLM_PROVIDERS)}"
-            )
+    def llm_provider(self, value: str | LlmProvider) -> None:
+        if isinstance(value, str):
+            try:
+                value = LlmProvider(value)
+            except ValueError:
+                raise ValueError(
+                    f"Unknown LLM provider: {value!r}. Choose from {[p.value for p in LlmProvider]}"
+                )
         self._llm_provider = value
 
     @property

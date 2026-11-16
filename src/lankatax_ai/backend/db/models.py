@@ -19,6 +19,12 @@ document_kind_enum = PgEnum("pdf", "page", name="document_kind_enum", create_typ
 chunk_strategy_enum = PgEnum(
     "structural", "semantic", "recursive", name="chunk_strategy_enum", create_type=True
 )
+search_source_enum = PgEnum("cli", "api", name="search_source_enum", create_type=True)
+search_mode_enum = PgEnum("hybrid", "vector", "keyword", name="search_mode_enum", create_type=True)
+query_type_enum = PgEnum(
+    "factual", "calculation", "procedural", name="query_type_enum", create_type=True
+)
+llm_provider_enum = PgEnum("gemini", "groq", name="llm_provider_enum", create_type=True)
 
 
 class Document(Base):
@@ -173,3 +179,24 @@ class CacheEntry(Base):
     response: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")
     hit_count: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class SearchLog(Base):
+    __tablename__ = "search_logs"
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, default=uuid4, server_default=text("gen_random_uuid()")
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    expanded_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    query_type: Mapped[str] = mapped_column(query_type_enum, nullable=False)
+    search_mode: Mapped[str] = mapped_column(search_mode_enum, nullable=False)
+    top_score: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    result_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    latency_embed_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_search_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_rerank_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_total_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    llm_provider: Mapped[str | None] = mapped_column(llm_provider_enum, nullable=True)
+    source: Mapped[str] = mapped_column(search_source_enum, nullable=False, server_default="'cli'")
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")

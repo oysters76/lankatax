@@ -10,9 +10,12 @@ from rich.table import Table
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
+from lankatax_ai.backend.rag.query_preprocessor import QueryPreprocessor
 from lankatax_ai.backend.rag.reranker import Reranker
 from lankatax_ai.backend.rag.retriever import HybridRetriever
+from lankatax_ai.backend.rag.search_analytics import SearchAnalytics, SearchTiming
 from lankatax_ai.backend.rag.types import SearchMode
+from lankatax_ai.backend.types import LlmProvider
 from lankatax_ai.cli.state import cli_state
 
 console = Console()
@@ -20,14 +23,14 @@ console = Console()
 
 def _build_llm() -> BaseChatModel:
     provider = cli_state.llm_provider
-    if provider == "gemini":
+    if provider is LlmProvider.gemini:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=settings.google_api_key.get_secret_value(),
         )
-    elif provider == "groq":
+    elif provider is LlmProvider.groq:
         from langchain_groq import ChatGroq
 
         return ChatGroq(
@@ -60,20 +63,36 @@ async def _search_async(
     query: str, mode: SearchMode, category: str | None, do_rerank: bool, show_context: bool
 ):
     top_k = cli_state.top_k
-    t0 = time.perf_counter()
-
+    search_timings = SearchTiming()
+    search_start_timing, search_end_timing, rerank_end_timing = time.perf_counter(), None, None
+    query_preprocessor = QueryPreprocessor()
+    processed_query = query_preprocessor.process(query)
     embed_model = OpenAIEmbeddings(model="text-embedding-3-small")
     async with async_session() as session:
         retriever = HybridRetriever(session, embed_model, vector_weight=cli_state.vector_weight)
         results = await retriever.search(
-            query,
+            processed_query.expanded,
             mode=mode,
             top_k=top_k,
             category=category,
             include_embeddings=show_context,
         )
+        search_end_timing = time.perf_counter()
 
     if not results:
+        search_timings.record(search_start=search_start_timing, search_end=search_end_timing)
+        async with async_session() as log_session:
+            analytics = SearchAnalytics(log_session)
+            await analytics.log_search(
+                query_text=query,
+                expanded_query=processed_query.expanded,
+                query_type=processed_query.query_type,
+                search_mode=mode,
+                top_score=None,
+                result_count=0,
+                timing=search_timings,
+            )
+            await log_session.commit()
         console.print("[yellow]No results found.[/yellow]")
         await dispose_engine()
         return
@@ -82,10 +101,12 @@ async def _search_async(
         llm = _build_llm()
         reranker = Reranker(llm, threshold=cli_state.rerank_threshold)
         results = await reranker.rerank(query, results, top_k=top_k)
+        rerank_end_timing = time.perf_counter()
 
-    elapsed = time.perf_counter() - t0
-
-    _print_results_table(results, elapsed)
+    search_timings.record(
+        search_start=search_start_timing, search_end=search_end_timing, rerank_end=rerank_end_timing
+    )
+    _print_results_table(results, search_timings)
 
     if show_context:
         builder = ContextBuilder(
@@ -96,10 +117,23 @@ async def _search_async(
         console.print("\n[bold]Assembled Context:[/bold]")
         console.print(context_window)
 
+    async with async_session() as log_session:
+        analytics = SearchAnalytics(log_session)
+        await analytics.log_search(
+            query_text=query,
+            expanded_query=processed_query.expanded,
+            query_type=processed_query.query_type,
+            search_mode=mode,
+            top_score=results[0].score if results else None,
+            result_count=len(results),
+            timing=search_timings,
+            llm_provider=cli_state.llm_provider if do_rerank else None,
+        )
+        await log_session.commit()
     await dispose_engine()
 
 
-def _print_results_table(results, elapsed: float):
+def _print_results_table(results, timing: SearchTiming):
     table = Table(title="Search Results", show_lines=True, padding=(0, 1))
     table.add_column("Rank", style="bold", width=4, justify="right")
     table.add_column("Score", width=6, justify="right")
@@ -121,7 +155,11 @@ def _print_results_table(results, elapsed: float):
         )
 
     console.print(table)
-    console.print(f"\n[dim]{len(results)} results in {elapsed:.2f}s[/dim]")
+    parts = [f"{len(results)} results in {timing.elapsed_seconds:.2f}s"]
+    parts.append(f"search={timing.search_ms}ms")
+    if timing.rerank_ms:
+        parts.append(f"rerank={timing.rerank_ms}ms")
+    console.print(f"\n[dim]{' · '.join(parts)}[/dim]")
 
 
 def _score_label(r) -> str:

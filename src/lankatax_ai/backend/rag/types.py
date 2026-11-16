@@ -35,6 +35,11 @@ class RerankScorerResult:
     score: float
 
 
+class SearchSource(Enum):
+    cli = "cli"
+    api = "api"
+
+
 class QueryType(Enum):
     factual = "factual"
     calculation = "calculation"
