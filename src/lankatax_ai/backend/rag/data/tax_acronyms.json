@@ -1,0 +1,23 @@
+{
+  "IT": "Income Tax",
+  "PAYE": "Pay As You Earn",
+  "VAT": "Value Added Tax",
+  "SVAT": "Simplified Value Added Tax",
+  "SSCL": "Social Security Contribution Levy",
+  "CGT": "Capital Gain Tax",
+  "SD": "Stamp Duty",
+  "BGL": "Betting and Gaming Levy",
+  "STL": "Share Transaction Levy",
+  "TVRS": "Tourist VAT Refund Scheme",
+  "NBT": "Nation Building Tax",
+  "ESC": "Economic Service Charge",
+  "CIGFL": "Construction Industry Guarantee Fund Levy",
+  "APIT": "Advanced Personal Income Tax",
+  "AIT": "Advanced Income Tax",
+  "WHT": "Withholding Tax",
+  "TIN": "Taxpayer Identification Number",
+  "TRC": "Tax Residency Certificate",
+  "IRD": "Inland Revenue Department",
+  "IRA": "Inland Revenue Act",
+  "LKR": "Sri Lankan Rupee"
+}

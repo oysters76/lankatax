@@ -1,3 +1,4 @@
+import difflib
 import enum
 import json
 
@@ -9,6 +10,11 @@ class EnumEncoder(json.JSONEncoder):
         if isinstance(o, enum.Enum):
             return o.value
         return super().default(o)
+
+
+def fuzzy_match(term: str, candidates: list[str], *, cutoff: float = 0.6) -> str | None:
+    matches = difflib.get_close_matches(term, candidates, n=1, cutoff=cutoff)
+    return matches[0] if matches else None
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

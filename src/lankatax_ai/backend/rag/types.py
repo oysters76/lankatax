@@ -33,3 +33,16 @@ class RelevanceScore(BaseModel):
 class RerankScorerResult:
     result: RetrievalResult
     score: float
+
+
+class QueryType(Enum):
+    factual = "factual"
+    calculation = "calculation"
+    procedural = "procedural"
+
+
+@dataclasses.dataclass
+class PreprocessedQuery:
+    original: str
+    expanded: str
+    query_type: QueryType
