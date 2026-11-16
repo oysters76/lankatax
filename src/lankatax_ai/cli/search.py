@@ -49,6 +49,7 @@ def search(
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by tax category"),
     rerank: bool = typer.Option(False, "--rerank", "-r", help="Enable LLM reranking"),
     context: bool = typer.Option(False, "--context", help="Show assembled context window"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Bypass semantic cache"),
     stats: bool = typer.Option(False, "--stats", help="Show search analytics"),
 ):
     """Search the tax knowledge base."""
@@ -66,7 +67,7 @@ def search(
         console.print(f"[red]Invalid mode: {mode}. Use hybrid, vector, or keyword.[/red]")
         raise typer.Exit(1)
 
-    asyncio.run(_search_async(query, search_mode, category, rerank, context))
+    asyncio.run(_search_async(query, search_mode, category, rerank, context, no_cache))
 
 
 def _show_stats():
@@ -107,7 +108,12 @@ async def _show_stats_async():
 
 
 async def _search_async(
-    query: str, mode: SearchMode, category: str | None, do_rerank: bool, show_context: bool
+    query: str,
+    mode: SearchMode,
+    category: str | None,
+    do_rerank: bool,
+    show_context: bool,
+    no_cache: bool = False,
 ):
     top_k = cli_state.top_k
     search_timings = SearchTiming()
@@ -119,14 +125,15 @@ async def _search_async(
 
     # Step 1: check cache
     query_embedding = await embed_model.aembed_query(processed_query.expanded)
-    async with async_session() as session:
-        rc = PgResultCache(session)
-        cached = await rc.get(processed_query.expanded, query_embedding)
-        if cached:
-            cache_hit = True
-            results = cached
-            search_end_timing = time.perf_counter()
-            console.print("[dim]Cache hit[/dim]")
+    if not no_cache:
+        async with async_session() as session:
+            rc = PgResultCache(session)
+            cached = await rc.get(processed_query.expanded, query_embedding)
+            if cached:
+                cache_hit = True
+                results = cached
+                search_end_timing = time.perf_counter()
+                console.print("[dim]Cache hit[/dim]")
 
     # Step 2: on miss, run full pipeline
     if not cache_hit:
@@ -182,7 +189,7 @@ async def _search_async(
         console.print(context_window)
 
     # Step 3: cache results on miss
-    if not cache_hit:
+    if not cache_hit and not no_cache:
         async with async_session() as cache_session:
             rc = PgResultCache(cache_session)
             await rc.put(processed_query.expanded, query_embedding, results)
