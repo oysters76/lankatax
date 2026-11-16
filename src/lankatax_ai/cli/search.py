@@ -12,6 +12,7 @@ from lankatax_ai.backend.db.session import async_session, dispose_engine
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
 from lankatax_ai.backend.rag.query_preprocessor import QueryPreprocessor
 from lankatax_ai.backend.rag.reranker import Reranker
+from lankatax_ai.backend.rag.result_cache import PgResultCache
 from lankatax_ai.backend.rag.retriever import HybridRetriever
 from lankatax_ai.backend.rag.search_analytics import SearchAnalytics, SearchTiming
 from lankatax_ai.backend.rag.types import SearchMode
@@ -114,16 +115,31 @@ async def _search_async(
     query_preprocessor = QueryPreprocessor()
     processed_query = query_preprocessor.process(query)
     embed_model = OpenAIEmbeddings(model="text-embedding-3-small")
+    cache_hit = False
+
+    # Step 1: check cache
+    query_embedding = await embed_model.aembed_query(processed_query.expanded)
     async with async_session() as session:
-        retriever = HybridRetriever(session, embed_model, vector_weight=cli_state.vector_weight)
-        results = await retriever.search(
-            processed_query.expanded,
-            mode=mode,
-            top_k=top_k,
-            category=category,
-            include_embeddings=show_context,
-        )
-        search_end_timing = time.perf_counter()
+        rc = PgResultCache(session)
+        cached = await rc.get(processed_query.expanded, query_embedding)
+        if cached:
+            cache_hit = True
+            results = cached
+            search_end_timing = time.perf_counter()
+            console.print("[dim]Cache hit[/dim]")
+
+    # Step 2: on miss, run full pipeline
+    if not cache_hit:
+        async with async_session() as session:
+            retriever = HybridRetriever(session, embed_model, vector_weight=cli_state.vector_weight)
+            results = await retriever.search(
+                processed_query.expanded,
+                mode=mode,
+                top_k=top_k,
+                category=category,
+                include_embeddings=show_context,
+            )
+            search_end_timing = time.perf_counter()
 
     if not results:
         search_timings.record(search_start=search_start_timing, search_end=search_end_timing)
@@ -143,14 +159,16 @@ async def _search_async(
         await dispose_engine()
         return
 
-    if do_rerank:
+    if do_rerank and not cache_hit:
         llm = _build_llm()
         reranker = Reranker(llm, threshold=cli_state.rerank_threshold)
         results = await reranker.rerank(query, results, top_k=top_k)
         rerank_end_timing = time.perf_counter()
 
     search_timings.record(
-        search_start=search_start_timing, search_end=search_end_timing, rerank_end=rerank_end_timing
+        search_start=search_start_timing,
+        search_end=search_end_timing,
+        rerank_end=rerank_end_timing,
     )
     _print_results_table(results, search_timings)
 
@@ -162,6 +180,13 @@ async def _search_async(
         context_window = builder.build(results)
         console.print("\n[bold]Assembled Context:[/bold]")
         console.print(context_window)
+
+    # Step 3: cache results on miss
+    if not cache_hit:
+        async with async_session() as cache_session:
+            rc = PgResultCache(cache_session)
+            await rc.put(processed_query.expanded, query_embedding, results)
+            await cache_session.commit()
 
     async with async_session() as log_session:
         analytics = SearchAnalytics(log_session)

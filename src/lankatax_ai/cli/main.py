@@ -3,6 +3,7 @@ import logging
 import typer
 from rich import print as rprint
 
+from lankatax_ai.cli.cache import cache
 from lankatax_ai.cli.ingest import ingest
 from lankatax_ai.cli.scrape import scrape
 from lankatax_ai.cli.search import search
@@ -41,6 +42,7 @@ def main(
 app.command()(scrape)
 app.command()(ingest)
 app.command()(search)
+app.command()(cache)
 
 
 @app.command()
