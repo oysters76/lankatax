@@ -18,9 +18,10 @@ from lankatax_ai.backend.rag.reranker import Reranker
 from lankatax_ai.backend.rag.result_cache import PgResultCache
 from lankatax_ai.backend.rag.retriever import HybridRetriever
 from lankatax_ai.backend.rag.search_analytics import SearchAnalytics, SearchTiming
-from lankatax_ai.backend.rag.types import SearchMode
+from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode
 from lankatax_ai.backend.types import DocumentKind, LlmProvider
 from lankatax_ai.backend.utils import merge_result_sets
+from lankatax_ai.cli.formatting import print_sources
 from lankatax_ai.cli.state import cli_state
 
 console = Console()
@@ -292,7 +293,7 @@ async def _search_async(
     await dispose_engine()
 
 
-def _print_results_table(results, timing: SearchTiming):
+def _print_results_table(results: list[RetrievalResult], timing: SearchTiming):
     table = Table(title="Search Results", show_lines=True, padding=(0, 1))
     table.add_column("Rank", style="bold", width=4, justify="right")
     table.add_column("Score", width=6, justify="right")
@@ -314,6 +315,7 @@ def _print_results_table(results, timing: SearchTiming):
         )
 
     console.print(table)
+    print_sources(results, console)
     parts = [f"{len(results)} results in {timing.elapsed_seconds:.2f}s"]
     parts.append(f"search={timing.search_ms}ms")
     if timing.rerank_ms:
