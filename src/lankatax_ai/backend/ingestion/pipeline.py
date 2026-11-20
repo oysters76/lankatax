@@ -54,7 +54,7 @@ async def ingest_document(
     logger.debug("Deleted %d old chunks for doc %s", deleted, doc.id)
     await store_chunks(session, doc.id, embedded)
     await update_ingested_hash(session, doc.id, doc.content_hash)
-    await session.commit()
+    await session.flush()
     logger.info("Done doc %s — %d chunks, %d tokens", doc.id, len(embedded), tokens_used)
     return len(embedded), tokens_used
 
@@ -78,14 +78,17 @@ async def _ingest_ids(
                     on_progress(doc_id, 0, str(doc_id), 0, "not found")
                 continue
             chunk_count, tokens_used = await ingest_document(session, doc, config, model)
+            doc_title = doc.title or doc.url
+            await session.commit()
             result.docs_processed += 1
             result.chunks_created += chunk_count
             result.tokens_used += tokens_used
             if on_progress:
-                on_progress(doc_id, chunk_count, doc.title or doc.url, tokens_used, None)
+                on_progress(doc_id, chunk_count, doc_title, tokens_used, None)
         except Exception as e:
             logger.exception("Failed to ingest doc %s", doc_id)
             result.errors.append(f"{doc_id}: {e}")
+            await session.rollback()
             if on_progress:
                 on_progress(doc_id, 0, str(doc_id), 0, str(e))
     logger.info(

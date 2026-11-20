@@ -83,7 +83,6 @@ async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: st
         api_key=settings.openai_api_key.get_secret_value(),
     )
     config = ChunkConfig(strategy=ChunkStrategy(strategy))
-
     async with async_session() as session:
         if document_id:
             result = await _ingest_single(session, UUID(document_id), config, model, console)
@@ -95,7 +94,6 @@ async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: st
             result = await _ingest_batch(
                 session, config, model, console, mode="pending", verbose=verbose
             )
-
     _print_summary(console, result)
     await dispose_engine()
 
@@ -108,6 +106,7 @@ async def _ingest_single(session, doc_id, config, model, console):
 
     console.print(f"Ingesting [cyan]{doc.title}[/cyan]...")
     chunk_count, tokens_used = await ingest_document(session, doc, config, model)
+    await session.commit()
     return IngestionResult(docs_processed=1, chunks_created=chunk_count, tokens_used=tokens_used)
 
 
