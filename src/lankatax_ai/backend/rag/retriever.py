@@ -32,12 +32,29 @@ class HybridRetriever:
         *,
         mode: SearchMode = SearchMode.hybrid,
         top_k: int = 5,
+        candidate_k: int | None = None,
         filters: MetadataFilters | None = None,
         include_embeddings: bool = False,
     ) -> list[RetrievalResult]:
+        """Search the chunk index.
+
+        ``top_k`` is the final answer size. ``candidate_k`` optionally requests a
+        larger pool (up to that many results) for downstream reranking; it must be
+        greater than or equal to ``top_k``. Hybrid mode fetches
+        ``CANDIDATE_MULTIPLIER`` rows per source for the chosen pool size.
+        """
+        if candidate_k is not None and candidate_k < top_k:
+            raise ValueError(f"candidate_k ({candidate_k}) must be >= top_k ({top_k})")
+        limit = candidate_k if candidate_k is not None else top_k
         filters = filters or MetadataFilters()
         logger.info(
-            "Search query=%r mode=%s top_k=%d filters=%s", query, mode.value, top_k, filters
+            "Search query=%r mode=%s top_k=%d candidate_k=%s limit=%d filters=%s",
+            query,
+            mode.value,
+            top_k,
+            candidate_k,
+            limit,
+            filters,
         )
 
         query_embedding = None
@@ -45,20 +62,21 @@ class HybridRetriever:
             query_embedding = await self.embed_model.aembed_query(query)
 
         if mode == SearchMode.hybrid:
-            pool = top_k * self.CANDIDATE_MULTIPLIER
+            pool = limit * self.CANDIDATE_MULTIPLIER
+            logger.debug("Hybrid pool=%d rows per source", pool)
             vector_results = await self._vector_search(
                 query_embedding, pool, filters, include_embeddings
             )
             keyword_results = await self._keyword_search(query, pool, filters, include_embeddings)
             results = self._merge_results(vector_results, keyword_results)
         elif mode == SearchMode.vector:
-            results = await self._vector_search(query_embedding, top_k, filters, include_embeddings)
+            results = await self._vector_search(query_embedding, limit, filters, include_embeddings)
         elif mode == SearchMode.keyword:
-            results = await self._keyword_search(query, top_k, filters, include_embeddings)
+            results = await self._keyword_search(query, limit, filters, include_embeddings)
         else:
             raise ValueError(f"Unknown search mode: {mode}")
 
-        results = sorted(results, key=lambda r: r.score, reverse=True)[:top_k]
+        results = sorted(results, key=lambda r: r.score, reverse=True)[:limit]
         logger.info(
             "Returning %d results (top score=%.3f)",
             len(results),
