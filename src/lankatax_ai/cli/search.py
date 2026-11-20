@@ -169,7 +169,10 @@ async def _search_async(
     search_start_timing, search_end_timing, rerank_end_timing = time.perf_counter(), None, None
     query_preprocessor = QueryPreprocessor()
     processed_query = query_preprocessor.process(query)
-    embed_model = OpenAIEmbeddings(model="text-embedding-3-small")
+    embed_model = OpenAIEmbeddings(
+        model="text-embedding-3-small",
+        api_key=settings.openai_api_key.get_secret_value(),
+    )
     cache_hit = False
 
     # Step 1: check cache
