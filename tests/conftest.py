@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from alembic.config import Config as AlembicConfig
-from sqlalchemy import delete
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 from alembic import command as alembic_command
+from lankatax_ai.backend.db.models import Base
 
 ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
+_TABLES = [t.name for t in Base.metadata.sorted_tables]
 
 
 @pytest.fixture(scope="session")
@@ -47,12 +49,14 @@ async def session(async_engine):
         await session.rollback()
 
 
+async def _truncate(session: AsyncSession) -> None:
+    await session.execute(text(f"TRUNCATE TABLE {', '.join(_TABLES)} CASCADE"))
+
+
 @pytest_asyncio.fixture(loop_scope="session")
 async def clean_session(async_engine):
-    """Per-test session that rolls back after each test — no data leaks."""
-    from lankatax_ai.backend.db.models import Document
-
+    """Per-test session; empties every table before the test runs."""
     async with AsyncSession(async_engine) as session:
-        await session.execute(delete(Document))
+        await _truncate(session)
         await session.commit()
         yield session
