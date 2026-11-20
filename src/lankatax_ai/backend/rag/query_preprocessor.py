@@ -52,7 +52,7 @@ class QueryPreprocessor:
         corrected = []
         for token in tokens:
             token_lower = token.lower()
-            if token_lower in self._term_words:
+            if token.upper() in self._acronyms or token_lower in self._term_words:
                 corrected.append(token)
             else:
                 match = fuzzy_match(token_lower, list(self._term_words), cutoff=0.7)
