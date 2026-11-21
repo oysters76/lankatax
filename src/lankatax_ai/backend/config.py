@@ -1,6 +1,6 @@
 import logging
 
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,11 +26,18 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
-    # LangSmith Observability
-    langchain_api_key: SecretStr
-    langchain_project: str
-    langchain_tracing_v2: bool
-    langchain_endpoint: str
+    langchain_api_key: SecretStr = Field(
+        validation_alias=AliasChoices("LANGSMITH_API_KEY", "LANGCHAIN_API_KEY")
+    )
+    langchain_project: str = Field(
+        validation_alias=AliasChoices("LANGSMITH_PROJECT", "LANGCHAIN_PROJECT")
+    )
+    langchain_tracing_v2: bool = Field(
+        validation_alias=AliasChoices("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2")
+    )
+    langchain_endpoint: str = Field(
+        validation_alias=AliasChoices("LANGSMITH_ENDPOINT", "LANGCHAIN_ENDPOINT")
+    )
 
     model_config = SettingsConfigDict(env_file=".env")
 

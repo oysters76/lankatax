@@ -2,6 +2,25 @@ import os
 
 os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
 
+# Placeholder settings so importing lankatax_ai.backend.config never needs a
+# real .env. Tests that exercise Settings pass _env_file=None.
+_SETTINGS_DEFAULTS = {
+    "POSTGRES_DB_NAME": "lankatax_test",
+    "POSTGRES_USER": "lankatax",
+    "POSTGRES_PASSWORD": "test",
+    "POSTGRES_HOST": "localhost",
+    "POSTGRES_PORT": "5432",
+    "OPENAI_API_KEY": "test",
+    "GOOGLE_API_KEY": "test",
+    "GROQ_API_KEY": "test",
+    "LANGSMITH_API_KEY": "test",
+    "LANGSMITH_PROJECT": "lankatax-test",
+    "LANGSMITH_TRACING": "false",
+    "LANGSMITH_ENDPOINT": "https://api.smith.langchain.com",
+}
+for _name, _value in _SETTINGS_DEFAULTS.items():
+    os.environ.setdefault(_name, _value)
+
 from pathlib import Path
 
 import pytest
