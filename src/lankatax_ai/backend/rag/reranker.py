@@ -6,37 +6,29 @@ import logging
 
 from langchain_core.language_models import BaseChatModel
 
+from lankatax_ai.backend.rag.prompts import get_prompt
 from lankatax_ai.backend.rag.types import RelevanceScore, RerankScorerResult, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
 
-RERANK_PROMPT = """Rate how relevant the following text is to answering the query.
-Score from 1 to 10, where 1 means completely irrelevant and 10 means directly answers the query.
-
-Query: {query}
-
-Text: {text}"""
-
-
 class Reranker:
     SEMAPHORE_LIMIT: int = 5
 
-    def __init__(self, llm: BaseChatModel, *, threshold: int = 3):
+    def __init__(
+        self, llm: BaseChatModel, *, threshold: int = 3, prompt_version: str | None = None
+    ):
         self._llm = llm
         self._structured_llm = self._llm.with_structured_output(RelevanceScore)
         self._threshold = threshold
-
-    def _build_prompt(self, query: str, result: RetrievalResult) -> str:
-        # TODO: replace with versioned YAML prompt from prompt_loader
-        return RERANK_PROMPT.format(query=query, text=result.content)
+        self._prompt = get_prompt("rerank", version=prompt_version)
 
     async def _score_one(
         self, query: str, result: RetrievalResult, sem: asyncio.Semaphore
     ) -> RerankScorerResult:
         async with sem:
-            prompt = self._build_prompt(query, result)
-            response = await self._structured_llm.ainvoke(prompt)
+            messages = self._prompt.format_messages(query=query, text=result.content)
+            response = await self._structured_llm.ainvoke(messages)
             return RerankScorerResult(result=result, score=response.score / 10.0)
 
     async def rerank(

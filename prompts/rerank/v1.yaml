@@ -1,0 +1,16 @@
+id: rerank
+version: v1
+description: Score how relevant one chunk is to answering the query.
+created: 2026-11-21
+tags: [rerank, scoring]
+input_variables: [query, text]
+
+messages:
+  - role: human
+    content: |
+      Rate how relevant the following text is to answering the query.
+      Score from 1 to 10, where 1 means completely irrelevant and 10 means directly answers the query.
+
+      Query: {query}
+
+      Text: {text}
