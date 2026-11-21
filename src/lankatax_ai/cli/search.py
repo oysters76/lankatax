@@ -3,13 +3,13 @@ import time
 from datetime import date as date_type
 
 import typer
-from langchain_core.language_models import BaseChatModel
 from langchain_openai import OpenAIEmbeddings
 from rich.console import Console
 from rich.table import Table
 
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import async_session, dispose_engine
+from lankatax_ai.backend.llm import build_llm
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.multi_query_retriever import MultiQueryExpander
@@ -19,7 +19,7 @@ from lankatax_ai.backend.rag.result_cache import PgResultCache
 from lankatax_ai.backend.rag.retriever import HybridRetriever
 from lankatax_ai.backend.rag.search_analytics import SearchAnalytics, SearchTiming
 from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode
-from lankatax_ai.backend.types import DocumentKind, LlmProvider
+from lankatax_ai.backend.types import DocumentKind
 from lankatax_ai.backend.utils import merge_result_sets
 from lankatax_ai.cli.formatting import print_sources
 from lankatax_ai.cli.state import cli_state
@@ -46,27 +46,6 @@ def _parse_doc_type(value: str | None) -> str | None:
             f"Invalid doc type: {value!r}. Choose from {[k.value for k in DocumentKind]}."
         )
     return value
-
-
-def _build_llm() -> BaseChatModel:
-    provider = cli_state.llm_provider
-    if provider is LlmProvider.gemini:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=settings.google_api_key.get_secret_value(),
-        )
-    elif provider is LlmProvider.groq:
-        from langchain_groq import ChatGroq
-
-        return ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=settings.groq_api_key.get_secret_value(),
-        )
-    else:
-        console.print(f"[red]Unknown LLM provider: {provider}. Use gemini or groq.[/red]")
-        raise typer.Exit(1)
 
 
 def search(
@@ -191,7 +170,7 @@ async def _search_async(
     # Step 2: on miss, run full pipeline
     if not cache_hit:
         if multi_query:
-            llm = _build_llm()
+            llm = build_llm(cli_state.llm_provider)
             expander = MultiQueryExpander(llm)
             alt_queries = await expander.expand(processed_query.expanded)
             all_queries = [processed_query.expanded, *alt_queries]
@@ -247,7 +226,7 @@ async def _search_async(
         return
 
     if do_rerank and not cache_hit:
-        llm = _build_llm()
+        llm = build_llm(cli_state.llm_provider)
         reranker = Reranker(llm, threshold=cli_state.rerank_threshold)
         results = await reranker.rerank(query, results, top_k=top_k)
         rerank_end_timing = time.perf_counter()
