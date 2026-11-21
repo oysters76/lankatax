@@ -13,6 +13,11 @@ class LlmProvider(Enum):
     openai = "openai"
 
 
+class PromptSource(Enum):
+    local = "local"
+    hub = "hub"
+
+
 MODEL_TOKEN_BUDGETS: dict[LlmProvider, int] = {
     LlmProvider.gemini: 4000,
     LlmProvider.groq: 2500,

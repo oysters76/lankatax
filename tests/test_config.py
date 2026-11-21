@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from lankatax_ai.backend.config import Settings
+from lankatax_ai.backend.types import PromptSource
 
 pytestmark = pytest.mark.unit
 
@@ -65,6 +66,23 @@ def test_langsmith_name_wins_when_both_are_set(monkeypatch):
 def test_missing_key_is_still_required(monkeypatch):
     _clear_langsmith(monkeypatch)
     monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+
+    with pytest.raises(ValidationError):
+        _load()
+
+
+def test_prompt_source_defaults_to_local():
+    assert _load().prompt_source is PromptSource.local
+
+
+def test_prompt_source_is_read_from_env(monkeypatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_SOURCE", "hub")
+
+    assert _load().prompt_source is PromptSource.hub
+
+
+def test_unknown_prompt_source_fails_at_startup(monkeypatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_SOURCE", "s3")
 
     with pytest.raises(ValidationError):
         _load()

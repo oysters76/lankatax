@@ -3,6 +3,8 @@ import logging
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from lankatax_ai.backend.types import PromptSource
+
 
 class Settings(BaseSettings):
     # Database (used by docker-compose and backend)
@@ -26,6 +28,19 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    # Prompt loading. Defaults to versioned YAML files under prompts/.
+    # Set LANKATAX_PROMPT_SOURCE=hub to pull from LangSmith Hub instead.
+    prompt_source: PromptSource = Field(
+        PromptSource.local, validation_alias=AliasChoices("LANKATAX_PROMPT_SOURCE")
+    )
+    prompt_hub_prefix: str | None = Field(
+        None, validation_alias=AliasChoices("LANKATAX_PROMPT_HUB_PREFIX")
+    )
+    prompts_dir: str | None = Field(None, validation_alias=AliasChoices("LANKATAX_PROMPTS_DIR"))
+    prompt_overrides: str | None = Field(
+        None, validation_alias=AliasChoices("LANKATAX_PROMPT_OVERRIDES")
+    )
 
     langchain_api_key: SecretStr = Field(
         validation_alias=AliasChoices("LANGSMITH_API_KEY", "LANGCHAIN_API_KEY")

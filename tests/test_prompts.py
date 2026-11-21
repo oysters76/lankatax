@@ -4,18 +4,22 @@ import json
 from pathlib import Path
 
 import pytest
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
 from lankatax_ai.backend.rag import multi_query_retriever, reranker
+from lankatax_ai.backend.rag import prompts as prompts_module
 from lankatax_ai.backend.rag.multi_query_retriever import MultiQueryExpander
 from lankatax_ai.backend.rag.prompts import (
     Prompt,
     PromptError,
     PromptFormatError,
     PromptNotFound,
+    PromptSourceError,
     PromptVariableError,
     get_prompt,
 )
 from lankatax_ai.backend.rag.reranker import Reranker
+from lankatax_ai.backend.types import PromptSource
 
 pytestmark = pytest.mark.unit
 
@@ -50,9 +54,36 @@ def _write_manifest(root: Path, prompt_id: str = "demo", default: str = "v1") ->
 
 @pytest.fixture
 def prompts_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from lankatax_ai.backend.config import settings
+
     monkeypatch.setenv("LANKATAX_PROMPTS_DIR", str(tmp_path))
     monkeypatch.delenv("LANKATAX_PROMPT_OVERRIDES", raising=False)
+    monkeypatch.delenv("LANKATAX_PROMPT_SOURCE", raising=False)
+    monkeypatch.delenv("LANKATAX_PROMPT_HUB_PREFIX", raising=False)
+    monkeypatch.setattr(settings, "prompts_dir", None)
+    monkeypatch.setattr(settings, "prompt_overrides", None)
+    monkeypatch.setattr(settings, "prompt_source", PromptSource.local)
+    monkeypatch.setattr(settings, "prompt_hub_prefix", None)
     return tmp_path
+
+
+def _hub_template(content: str = "Question: {question}") -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages([("human", content)])
+
+
+def _fake_hub(
+    monkeypatch: pytest.MonkeyPatch, template, *, error: Exception | None = None
+) -> list[str]:
+    calls: list[str] = []
+
+    def fake_pull(identifier: str):
+        calls.append(identifier)
+        if error is not None:
+            raise error
+        return template
+
+    monkeypatch.setattr(prompts_module, "_pull_from_hub", fake_pull)
+    return calls
 
 
 def test_manifest_default_version_is_loaded(prompts_dir: Path):
@@ -65,6 +96,7 @@ def test_manifest_default_version_is_loaded(prompts_dir: Path):
     assert prompt.id == "demo"
     assert prompt.version == "v1"
     assert prompt.input_variables == ("question",)
+    assert prompt.source is PromptSource.local
 
 
 def test_explicit_version_wins_over_manifest(prompts_dir: Path):
@@ -343,6 +375,7 @@ def test_hash_is_stable_and_metadata_is_exposed(prompts_dir: Path):
         "prompt_id": "demo",
         "prompt_version": "v1",
         "prompt_hash": first.sha256,
+        "prompt_source": "local",
     }
 
 
@@ -381,11 +414,189 @@ def test_every_repo_prompt_loads():
         )
         assert versions, f"{directory.name} has no version files"
 
-        default = get_prompt(directory.name)
+        default = get_prompt(directory.name, source="local")
         assert default.id == directory.name
         assert default.input_variables
 
         for version in versions:
-            prompt = get_prompt(directory.name, version=version)
+            prompt = get_prompt(directory.name, version=version, source="local")
             assert prompt.version == version
             assert prompt.sha256
+
+
+def test_environment_can_select_the_hub(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_SOURCE", "hub")
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    prompt = get_prompt("demo")
+
+    assert calls == ["owner/demo"]
+    assert prompt.source is PromptSource.hub
+
+
+def test_explicit_source_beats_the_environment(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    _write_prompt(prompts_dir)
+    _write_manifest(prompts_dir)
+    monkeypatch.setenv("LANKATAX_PROMPT_SOURCE", "hub")
+    monkeypatch.setattr(
+        prompts_module,
+        "_pull_from_hub",
+        lambda identifier: pytest.fail(f"hub called with {identifier}"),
+    )
+
+    assert get_prompt("demo", source="local").source is PromptSource.local
+
+
+def test_hub_uses_manifest_default_as_tag(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner/project")
+    (prompts_dir / "demo").mkdir()
+    _write_manifest(prompts_dir)
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    prompt = get_prompt("demo", source="hub")
+
+    assert calls == ["owner/project/demo:v1"]
+    assert prompt.version == "v1"
+    assert prompt.source is PromptSource.hub
+    assert prompt.path is None
+    assert prompt.format_messages(question="APIT")[0].content == "Question: APIT"
+
+
+def test_hub_without_manifest_uses_latest(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    prompt = get_prompt("demo", source="hub")
+
+    assert calls == ["owner/demo"]
+    assert prompt.version == "latest"
+
+
+def test_hub_explicit_version_is_a_tag(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    assert get_prompt("demo", version="prod", source="hub").version == "prod"
+    assert calls == ["owner/demo:prod"]
+
+
+def test_hub_prompt_override_is_a_tag(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    monkeypatch.setenv("LANKATAX_PROMPT_OVERRIDES", "demo=v2")
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    assert get_prompt("demo", source="hub").version == "v2"
+    assert calls == ["owner/demo:v2"]
+
+
+def test_unknown_source_raises(prompts_dir: Path):
+    with pytest.raises(PromptSourceError, match="Unknown prompt source"):
+        get_prompt("demo", source="s3")
+
+
+def test_hub_requires_a_prefix(prompts_dir: Path):
+    with pytest.raises(PromptSourceError, match="LANKATAX_PROMPT_HUB_PREFIX"):
+        get_prompt("demo", source="hub")
+
+
+def test_hub_pull_failure_is_wrapped(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, None, error=RuntimeError("network down"))
+
+    with pytest.raises(PromptSourceError, match="network down"):
+        get_prompt("demo", source="hub")
+
+
+def test_hub_rejects_non_chat_prompts(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, PromptTemplate.from_template("{question}"))
+
+    with pytest.raises(PromptFormatError, match="expected a chat prompt"):
+        get_prompt("demo", source="hub")
+
+
+def test_hub_rejects_invalid_placeholders(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, _hub_template("{Question}"))
+
+    with pytest.raises(PromptFormatError, match="snake_case"):
+        get_prompt("demo", source="hub")
+
+
+def test_hub_keeps_strict_render_checks(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, _hub_template())
+    prompt = get_prompt("demo", source="hub")
+
+    with pytest.raises(PromptVariableError, match="missing"):
+        prompt.format_messages()
+
+    with pytest.raises(PromptVariableError, match="unexpected"):
+        prompt.format_messages(question="APIT", context="18%")
+
+
+def test_hub_metadata_and_hash_are_exposed(prompts_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, _hub_template())
+
+    first = get_prompt("demo", source="hub")
+    second = get_prompt("demo", source="hub")
+
+    assert first.sha256 == second.sha256
+    assert first.metadata == {
+        "prompt_id": "demo",
+        "prompt_version": "latest",
+        "prompt_hash": first.sha256,
+        "prompt_source": "hub",
+    }
+
+
+def test_identical_local_and_hub_prompts_hash_the_same(
+    prompts_dir: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _write_prompt(prompts_dir)
+    _write_manifest(prompts_dir)
+    local = get_prompt("demo", source="local")
+
+    monkeypatch.setenv("LANKATAX_PROMPT_HUB_PREFIX", "owner")
+    _fake_hub(monkeypatch, _hub_template())
+    hub = get_prompt("demo", source="hub")
+
+    assert local.sha256 == hub.sha256
+
+
+def test_settings_are_used_when_environment_is_unset(
+    prompts_dir: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from lankatax_ai.backend.config import settings
+
+    monkeypatch.setattr(settings, "prompt_source", PromptSource.hub)
+    monkeypatch.setattr(settings, "prompt_hub_prefix", "owner")
+    calls = _fake_hub(monkeypatch, _hub_template())
+
+    prompt = get_prompt("demo")
+
+    assert calls == ["owner/demo"]
+    assert prompt.source is PromptSource.hub
+
+
+def test_hub_pull_reuses_one_client_and_uses_the_sdk_cache(monkeypatch):
+    class FakeClient:
+        def __init__(self):
+            self.calls = []
+
+        def pull_prompt(self, identifier, *, skip_cache=True):
+            self.calls.append((identifier, skip_cache))
+            return _hub_template()
+
+    client = FakeClient()
+    monkeypatch.setattr(prompts_module, "_hub_client", client)
+
+    prompts_module._pull_from_hub("owner/demo")
+    prompts_module._pull_from_hub("owner/demo:latest")
+
+    assert client.calls == [
+        ("owner/demo", False),
+        ("owner/demo:latest", False),
+    ]

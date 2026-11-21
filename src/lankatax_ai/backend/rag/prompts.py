@@ -4,18 +4,25 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+from langchain_core.load import dumpd
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
+
+from lankatax_ai.backend.types import PromptSource
 
 _ALLOWED_ROLES = frozenset({"system", "human", "ai"})
 _VARIABLE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _REQUIRED_KEYS = ("id", "version", "input_variables", "messages")
 _MANIFEST_NAME = "manifest.yaml"
+
+_hub_client: Any = None
+_hub_client_lock = threading.Lock()
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -57,17 +64,21 @@ class PromptVariableError(PromptError):
     """A prompt was rendered with missing, extra or invalid variables."""
 
 
+class PromptSourceError(PromptError):
+    """The prompt source is invalid or a hub prompt could not be pulled."""
+
+
 @dataclass(frozen=True)
 class Prompt:
     id: str
     version: str
-    messages: tuple[tuple[str, str], ...]
     input_variables: tuple[str, ...]
     sha256: str
-    path: Path
+    source: PromptSource
+    path: Path | None
 
     def template(self) -> ChatPromptTemplate:
-        return ChatPromptTemplate.from_messages(list(self.messages))
+        raise NotImplementedError
 
     def format_messages(self, **values: str) -> list[BaseMessage]:
         declared = set(self.input_variables)
@@ -101,23 +112,83 @@ class Prompt:
             "prompt_id": self.id,
             "prompt_version": self.version,
             "prompt_hash": self.sha256,
+            "prompt_source": self.source.value,
         }
+
+
+@dataclass(frozen=True)
+class LocalPrompt(Prompt):
+    messages: tuple[tuple[str, str], ...]
+
+    def template(self) -> ChatPromptTemplate:
+        return ChatPromptTemplate.from_messages(list(self.messages))
+
+
+@dataclass(frozen=True)
+class HubPrompt(Prompt):
+    chat_template: ChatPromptTemplate = field(repr=False, compare=False)
+
+    def template(self) -> ChatPromptTemplate:
+        return self.chat_template
 
 
 def prompts_root() -> Path:
     """Directory holding prompt files; override with LANKATAX_PROMPTS_DIR."""
-    override = os.environ.get("LANKATAX_PROMPTS_DIR")
+    override = _setting("LANKATAX_PROMPTS_DIR", "prompts_dir")
     if override:
         return Path(override).expanduser().resolve()
     return Path(__file__).resolve().parents[4] / "prompts"
 
 
-def get_prompt(prompt_id: str, *, version: str | None = None) -> Prompt:
-    """Load a prompt by id and version.
+def _setting(env_name: str, field: str) -> str | None:
+    """Read a prompt setting from the environment, then from Settings/.env."""
+    value = os.environ.get(env_name)
+    if value:
+        return value
 
-    Version precedence: explicit argument, then LANKATAX_PROMPT_OVERRIDES,
-    then the manifest default.
+    from lankatax_ai.backend.config import settings
+
+    value = getattr(settings, field, None)
+    if isinstance(value, PromptSource):
+        return value.value
+    return value or None
+
+
+def get_prompt(
+    prompt_id: str,
+    *,
+    version: str | None = None,
+    source: PromptSource | str | None = None,
+) -> Prompt:
+    """Load a prompt by id, version and source.
+
+    Source precedence: explicit argument, then LANKATAX_PROMPT_SOURCE, then
+    "local". Version precedence: explicit argument, then
+    LANKATAX_PROMPT_OVERRIDES, then the manifest default (local files) or
+    "latest" when a hub prompt has no local manifest.
     """
+    resolved_source = _resolve_source(source)
+    if resolved_source is PromptSource.hub:
+        return _load_hub(prompt_id, version)
+    return _load_local(prompt_id, version)
+
+
+def _resolve_source(source: PromptSource | str | None) -> PromptSource:
+    if source is None:
+        source = _setting("LANKATAX_PROMPT_SOURCE", "prompt_source") or "local"
+    if isinstance(source, PromptSource):
+        return source
+
+    try:
+        return PromptSource(source.strip().lower())
+    except ValueError as exc:
+        allowed = [item.value for item in PromptSource]
+        raise PromptSourceError(
+            f"Unknown prompt source {source!r}; expected one of {allowed}"
+        ) from exc
+
+
+def _load_local(prompt_id: str, version: str | None) -> Prompt:
     root = prompts_root() / prompt_id
     if not root.is_dir():
         raise PromptNotFound(f"Prompt {prompt_id!r} not found under {prompts_root()}")
@@ -133,8 +204,96 @@ def get_prompt(prompt_id: str, *, version: str | None = None) -> Prompt:
     return _build_prompt(_read_yaml(path), prompt_id=prompt_id, version=resolved, path=path)
 
 
+def _load_hub(prompt_id: str, version: str | None) -> Prompt:
+    prefix = (_setting("LANKATAX_PROMPT_HUB_PREFIX", "prompt_hub_prefix") or "").strip().rstrip("/")
+    if not prefix:
+        raise PromptSourceError(
+            "LANKATAX_PROMPT_HUB_PREFIX must be set (for example 'owner' or "
+            "'owner/project') when the prompt source is 'hub'"
+        )
+
+    resolved = (
+        version
+        or _env_override(prompt_id)
+        or _optional_manifest_default(prompt_id, prompts_root() / prompt_id)
+        or "latest"
+    )
+    identifier = f"{prefix}/{prompt_id}"
+    if resolved != "latest":
+        identifier = f"{identifier}:{resolved}"
+
+    try:
+        template = _pull_from_hub(identifier)
+    except PromptError:
+        raise
+    except Exception as exc:
+        raise PromptSourceError(
+            f"Could not pull prompt {identifier!r} from LangSmith Hub: {exc}"
+        ) from exc
+
+    if not isinstance(template, ChatPromptTemplate):
+        raise PromptFormatError(
+            f"{identifier}: expected a chat prompt, got {type(template).__name__}"
+        )
+
+    variables = tuple(template.input_variables)
+    invalid = sorted(name for name in variables if not _VARIABLE_RE.match(name))
+    if invalid:
+        raise PromptFormatError(
+            f"{identifier}: placeholders must be lowercase snake_case, got {invalid}"
+        )
+    if len(set(variables)) != len(variables):
+        raise PromptFormatError(f"{identifier}: duplicate input_variables")
+
+    return HubPrompt(
+        id=prompt_id,
+        version=resolved,
+        input_variables=variables,
+        sha256=_template_digest(template),
+        source=PromptSource.hub,
+        path=None,
+        chat_template=template,
+    )
+
+
+def _hub_client_instance():
+    """Build the LangSmith client once, with credentials from Settings.
+
+    Passing the key and endpoint explicitly means Hub pulls work even when
+    tracing is disabled or bootstrap_tracing() has not exported them.
+    """
+    global _hub_client
+    if _hub_client is None:
+        with _hub_client_lock:
+            if _hub_client is None:
+                from langsmith import Client
+
+                from lankatax_ai.backend.config import settings
+
+                _hub_client = Client(
+                    api_key=settings.langchain_api_key.get_secret_value(),
+                    api_url=settings.langchain_endpoint,
+                )
+    return _hub_client
+
+
+def _pull_from_hub(identifier: str) -> ChatPromptTemplate:
+    """Pull one prompt, reusing one client and LangSmith's prompt cache.
+
+    The client owns a thread-safe LRU cache (5 minute TTL by default) with
+    stale-while-revalidate, so repeat loads do not make a network call. A
+    single client also reuses its HTTP connection pool across pulls.
+    """
+    return _hub_client_instance().pull_prompt(identifier, skip_cache=False)
+
+
+def _template_digest(template: ChatPromptTemplate) -> str:
+    payload = json.dumps(dumpd(template), sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _env_override(prompt_id: str) -> str | None:
-    raw = os.environ.get("LANKATAX_PROMPT_OVERRIDES", "")
+    raw = _setting("LANKATAX_PROMPT_OVERRIDES", "prompt_overrides") or ""
     for entry in raw.split(","):
         name, separator, value = entry.partition("=")
         if separator and name.strip() == prompt_id:
@@ -143,9 +302,18 @@ def _env_override(prompt_id: str) -> str | None:
 
 
 def _manifest_default(prompt_id: str, root: Path) -> str:
+    default = _optional_manifest_default(prompt_id, root)
+    if default is None:
+        raise PromptFormatError(
+            f"Missing manifest for prompt {prompt_id!r}: {root / _MANIFEST_NAME}"
+        )
+    return default
+
+
+def _optional_manifest_default(prompt_id: str, root: Path) -> str | None:
     manifest = root / _MANIFEST_NAME
     if not manifest.is_file():
-        raise PromptFormatError(f"Missing manifest for prompt {prompt_id!r}: {manifest}")
+        return None
 
     default = _read_yaml(manifest).get("default")
     if not isinstance(default, str) or not default:
@@ -198,7 +366,8 @@ def _build_prompt(payload: dict[str, Any], *, prompt_id: str, version: str, path
         messages.append((role, content))
 
     try:
-        found = list(ChatPromptTemplate.from_messages(messages).input_variables)
+        template = ChatPromptTemplate.from_messages(messages)
+        found = list(template.input_variables)
     except (ValueError, TypeError) as exc:
         raise PromptFormatError(f"{path}: invalid message template: {exc}") from exc
 
@@ -214,15 +383,14 @@ def _build_prompt(payload: dict[str, Any], *, prompt_id: str, version: str, path
             f"{path}: input_variables mismatch (undeclared: {undeclared}, unused: {unused})"
         )
 
-    digest = hashlib.sha256(
-        json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    digest = _template_digest(template)
 
-    return Prompt(
+    return LocalPrompt(
         id=prompt_id,
         version=version,
         messages=tuple(messages),
         input_variables=tuple(raw_variables),
         sha256=digest,
+        source=PromptSource.local,
         path=path,
     )
