@@ -8,7 +8,11 @@ from lankatax_ai.backend.types import LlmProvider
 DEFAULT_MODELS: dict[LlmProvider, str] = {
     LlmProvider.gemini: "gemini-2.5-flash",
     LlmProvider.groq: "llama-3.3-70b-versatile",
+    LlmProvider.deepseek: "deepseek-chat",
+    LlmProvider.openai: "gpt-4o-mini",
 }
+
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 
 def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatModel:
@@ -31,6 +35,25 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
         return ChatGroq(
             model=model or DEFAULT_MODELS[LlmProvider.groq],
             api_key=settings.groq_api_key.get_secret_value(),
+        )
+
+    if provider is LlmProvider.deepseek:
+        from langchain_openai import ChatOpenAI
+
+        if settings.deepseek_api_key is None:
+            raise ValueError("DEEPSEEK_API_KEY is not set")
+        return ChatOpenAI(
+            model=model or DEFAULT_MODELS[LlmProvider.deepseek],
+            api_key=settings.deepseek_api_key.get_secret_value(),
+            base_url=DEEPSEEK_BASE_URL,
+        )
+
+    if provider is LlmProvider.openai:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model or DEFAULT_MODELS[LlmProvider.openai],
+            api_key=settings.openai_api_key.get_secret_value(),
         )
 
     raise ValueError(f"Unsupported LLM provider: {provider!r}")

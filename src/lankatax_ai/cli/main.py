@@ -15,7 +15,9 @@ app = typer.Typer(name="lankatax", help="LankaTax AI - Sri Lanka Tax RAG Pipelin
 @app.callback()
 def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
-    llm: str = typer.Option("gemini", "--llm", help="LLM provider: gemini or groq"),
+    llm: str = typer.Option(
+        "gemini", "--llm", help="LLM provider: gemini, groq, deepseek or openai"
+    ),
     token_budget: int | None = typer.Option(
         None, "--token-budget", help="Context token budget (auto from model if unset)"
     ),

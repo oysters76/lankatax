@@ -13,6 +13,7 @@ _SETTINGS_DEFAULTS = {
     "OPENAI_API_KEY": "test",
     "GOOGLE_API_KEY": "test",
     "GROQ_API_KEY": "test",
+    "DEEPSEEK_API_KEY": "test",
     "LANGSMITH_API_KEY": "test",
     "LANGSMITH_PROJECT": "lankatax-test",
     "LANGSMITH_TRACING": "false",

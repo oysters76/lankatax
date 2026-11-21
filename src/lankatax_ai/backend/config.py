@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr
     google_api_key: SecretStr
     groq_api_key: SecretStr
+    deepseek_api_key: SecretStr | None = None
 
     # Embedding cost (text-embedding-3-small: $0.02 per 1M tokens)
     embedding_cost_per_token: float = 0.02 / 1_000_000
