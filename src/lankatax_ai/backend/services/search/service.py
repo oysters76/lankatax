@@ -7,59 +7,31 @@ factory and get a :class:`SearchOutcome` back. Formatting stays in the caller.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
-from typing import Protocol, cast
+from typing import cast
 
 from langchain_openai import OpenAIEmbeddings
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.llm import build_llm
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
-from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.multi_query_retriever import MultiQueryExpander
 from lankatax_ai.backend.rag.query_preprocessor import QueryPreprocessor
 from lankatax_ai.backend.rag.reranker import Reranker
 from lankatax_ai.backend.rag.retriever import HybridRetriever
 from lankatax_ai.backend.rag.search_analytics import SearchTiming
-from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode
 from lankatax_ai.backend.services.errors import ValidationError
-from lankatax_ai.backend.services.types import SearchOptions, SearchOutcome
+from lankatax_ai.backend.services.protocols import Embeddings, SessionFactory
+from lankatax_ai.backend.services.search.types import (
+    Expander,
+    RerankLike,
+    Retriever,
+    RetrieverFactory,
+    SearchOptions,
+    SearchOutcome,
+)
 from lankatax_ai.backend.utils import merge_result_sets
 
 EMBEDDING_MODEL = "text-embedding-3-small"
-
-SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
-
-
-class Embeddings(Protocol):
-    async def aembed_query(self, text: str) -> list[float]: ...
-
-
-class Retriever(Protocol):
-    async def search(
-        self,
-        query: str,
-        *,
-        mode: SearchMode,
-        top_k: int,
-        filters: MetadataFilters | None,
-        include_embeddings: bool,
-    ) -> list[RetrievalResult]: ...
-
-
-class Expander(Protocol):
-    async def expand(self, query: str) -> list[str]: ...
-
-
-class RerankLike(Protocol):
-    async def rerank(
-        self, query: str, results: list[RetrievalResult], *, top_k: int
-    ) -> list[RetrievalResult]: ...
-
-
-RetrieverFactory = Callable[[AsyncSession], Retriever]
 
 
 def _default_embeddings() -> Embeddings:

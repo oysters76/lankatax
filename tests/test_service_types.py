@@ -11,15 +11,13 @@ from lankatax_ai.backend.rag.types import (
     SearchMode,
     SearchSource,
 )
-from lankatax_ai.backend.services import (
+from lankatax_ai.backend.services.errors import (
     NotFoundError,
-    SearchOptions,
-    SearchOutcome,
     ServiceError,
     UpstreamError,
     ValidationError,
-    limits,
 )
+from lankatax_ai.backend.services.search import SearchOptions, SearchOutcome, limits
 from lankatax_ai.backend.types import MODEL_TOKEN_BUDGETS, LlmProvider
 
 pytestmark = pytest.mark.unit

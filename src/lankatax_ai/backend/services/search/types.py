@@ -1,4 +1,4 @@
-"""Plain request and result models exchanged with the service layer.
+"""Request, result and collaborator types for the search use case.
 
 These types carry no transport concerns: no Rich renderables, no Typer
 parameters, no HTTP schemas. The CLI and the API both translate into and out of
@@ -8,6 +8,10 @@ them.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
+from typing import Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.search_analytics import SearchTiming
@@ -17,9 +21,34 @@ from lankatax_ai.backend.rag.types import (
     SearchMode,
     SearchSource,
 )
-from lankatax_ai.backend.services import limits
+from lankatax_ai.backend.services.search import limits
 from lankatax_ai.backend.services.utils import require_range
 from lankatax_ai.backend.types import MODEL_TOKEN_BUDGETS, LlmProvider
+
+
+class Retriever(Protocol):
+    async def search(
+        self,
+        query: str,
+        *,
+        mode: SearchMode,
+        top_k: int,
+        filters: MetadataFilters | None,
+        include_embeddings: bool,
+    ) -> list[RetrievalResult]: ...
+
+
+class Expander(Protocol):
+    async def expand(self, query: str) -> list[str]: ...
+
+
+class RerankLike(Protocol):
+    async def rerank(
+        self, query: str, results: list[RetrievalResult], *, top_k: int
+    ) -> list[RetrievalResult]: ...
+
+
+RetrieverFactory = Callable[[AsyncSession], Retriever]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

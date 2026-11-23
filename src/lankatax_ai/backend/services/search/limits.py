@@ -1,4 +1,4 @@
-"""Numeric limits and defaults for service request options.
+"""Numeric limits and defaults for search request options.
 
 Both transports (and the API's request schemas later) read these instead of
 repeating literals. Validation messages are derived from them, so a range only

@@ -7,8 +7,8 @@ import pytest
 
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode, SearchSource
-from lankatax_ai.backend.services import SearchOptions, ValidationError
-from lankatax_ai.backend.services.search_service import search
+from lankatax_ai.backend.services.errors import ValidationError
+from lankatax_ai.backend.services.search import SearchOptions, search
 
 pytestmark = pytest.mark.unit
 
