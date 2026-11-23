@@ -40,7 +40,7 @@ async def get_hash_map(session: AsyncSession) -> dict[str, str]:
     return {row.url: row.content_hash for row in rows}
 
 
-async def save_documents(session: AsyncSession, documents: list[Document]):
+async def save_documents(session: AsyncSession, documents: list[Document]) -> None:
     for doc in documents:
         stmt = pg_insert(Document).values(
             url=doc.url,

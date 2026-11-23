@@ -2,6 +2,7 @@ import logging
 import math
 import re
 import time
+from collections.abc import Callable
 
 from langchain_openai import OpenAIEmbeddings
 
@@ -33,7 +34,9 @@ def split_sentences(text: str) -> list[str]:
 
 
 def find_boundaries(
-    embeddings: list[list[float]], threshold: float = 0.75, similarity=cosine_similarity
+    embeddings: list[list[float]],
+    threshold: float = 0.75,
+    similarity: Callable[[list[float], list[float]], float] = cosine_similarity,
 ) -> list[int]:
     boundaries = []
     for i in range(len(embeddings) - 1):

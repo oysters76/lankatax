@@ -24,6 +24,8 @@ from lankatax_ai.backend.scraper.storage import (
 
 logger = logging.getLogger(__name__)
 
+ProgressCallback = Callable[[UUID, int, str, int, str | None], None]
+
 
 @dataclasses.dataclass
 class IngestionResult:
@@ -64,7 +66,7 @@ async def _ingest_ids(
     doc_ids: list[UUID],
     config: ChunkConfig,
     model: OpenAIEmbeddings,
-    on_progress: Callable[[UUID, int, str, int, str | None], None] | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     logger.info("Starting ingestion of %d documents", len(doc_ids))
     result = IngestionResult()
@@ -104,7 +106,7 @@ async def ingest_pending(
     session: AsyncSession,
     config: ChunkConfig,
     model: OpenAIEmbeddings,
-    on_progress: Callable[[UUID, int], None] | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     doc_ids = await get_pending_document_ids(session)
     logger.info("Found %d pending documents", len(doc_ids))
@@ -115,7 +117,7 @@ async def ingest_all(
     session: AsyncSession,
     config: ChunkConfig,
     model: OpenAIEmbeddings,
-    on_progress: Callable[[UUID, int], None] | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     doc_ids = await get_all_document_ids(session)
     logger.info("Found %d total documents", len(doc_ids))

@@ -2,8 +2,10 @@ import dataclasses
 import json
 import logging
 import uuid
+from typing import Any, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.db.models import Chunk as ChunkModel
@@ -33,19 +35,20 @@ async def store_chunks(session: AsyncSession, document_id: uuid.UUID, chunks: li
 
 async def delete_chunks_by_document_id(session: AsyncSession, document_id: uuid.UUID) -> int:
     result = await session.execute(delete(ChunkModel).where(ChunkModel.document_id == document_id))
-    logger.debug("Deleted %d chunks for doc %s", result.rowcount, document_id)
-    return result.rowcount
+    deleted = cast(CursorResult[Any], result).rowcount
+    logger.debug("Deleted %d chunks for doc %s", deleted, document_id)
+    return deleted
 
 
 async def delete_chunks_by_url(session: AsyncSession, url: str) -> int:
     subq = select(Document.id).where(Document.url == url).scalar_subquery()
     result = await session.execute(delete(ChunkModel).where(ChunkModel.document_id == subq))
-    return result.rowcount
+    return cast(CursorResult[Any], result).rowcount
 
 
 async def search_similar(
     session: AsyncSession, embedding: list[float], top_k: int = 20
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     distance = ChunkModel.embedding.cosine_distance(embedding).label("distance")
     stmt = (
         select(

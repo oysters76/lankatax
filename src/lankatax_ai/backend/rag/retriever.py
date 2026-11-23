@@ -62,6 +62,7 @@ class HybridRetriever:
             query_embedding = await self.embed_model.aembed_query(query)
 
         if mode == SearchMode.hybrid:
+            assert query_embedding is not None
             pool = limit * self.CANDIDATE_MULTIPLIER
             logger.debug("Hybrid pool=%d rows per source", pool)
             vector_results = await self._vector_search(
@@ -70,6 +71,7 @@ class HybridRetriever:
             keyword_results = await self._keyword_search(query, pool, filters, include_embeddings)
             results = self._merge_results(vector_results, keyword_results)
         elif mode == SearchMode.vector:
+            assert query_embedding is not None
             results = await self._vector_search(query_embedding, limit, filters, include_embeddings)
         elif mode == SearchMode.keyword:
             results = await self._keyword_search(query, limit, filters, include_embeddings)

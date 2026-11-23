@@ -1,5 +1,4 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from lankatax_ai.backend.config import settings
 
@@ -10,8 +9,8 @@ engine = create_async_engine(
     max_overflow=10,
     pool_recycle=3600,
 )
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def dispose_engine():
+async def dispose_engine() -> None:
     await engine.dispose()

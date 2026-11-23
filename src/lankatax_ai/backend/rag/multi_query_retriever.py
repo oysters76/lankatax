@@ -34,7 +34,8 @@ class MultiQueryExpander:
         try:
             messages = self._prompt.format_messages(num_queries=str(self._num_queries), query=query)
             response = await self._structured_llm.ainvoke(messages)
-            alternatives = response.queries[: self._num_queries]
+            parsed = ExpandedQueries.model_validate(response)
+            alternatives = parsed.queries[: self._num_queries]
             logger.debug("Expanded query=%r into %d alternatives", query, len(alternatives))
             return alternatives
         except Exception:

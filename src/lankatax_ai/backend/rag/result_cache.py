@@ -4,9 +4,11 @@ import dataclasses
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.db.models import CacheEntry
@@ -113,8 +115,9 @@ class PgResultCache(ResultCacheBase):
     async def clear(self) -> int:
         """Delete all cache entries. Returns count deleted."""
         result = await self._session.execute(delete(CacheEntry))
-        logger.debug("Cleared %d cache entries", result.rowcount)
-        return result.rowcount
+        deleted = cast(CursorResult[Any], result).rowcount
+        logger.debug("Cleared %d cache entries", deleted)
+        return deleted
 
     async def invalidate_expired(self) -> int:
         """Remove entries older than TTL. Returns count removed."""
@@ -122,8 +125,9 @@ class PgResultCache(ResultCacheBase):
         result = await self._session.execute(
             delete(CacheEntry).where(CacheEntry.created_at < cutoff)
         )
-        logger.debug("Invalidated %d expired cache entries", result.rowcount)
-        return result.rowcount
+        deleted = cast(CursorResult[Any], result).rowcount
+        logger.debug("Invalidated %d expired cache entries", deleted)
+        return deleted
 
     @staticmethod
     def _serialize_results(results: list[RetrievalResult]) -> str:

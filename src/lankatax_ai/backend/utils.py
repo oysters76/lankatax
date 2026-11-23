@@ -1,12 +1,16 @@
 import difflib
 import enum
 import json
+from typing import Any
+from uuid import UUID
 
 import numpy as np
 
+from lankatax_ai.backend.rag.types import RetrievalResult
+
 
 class EnumEncoder(json.JSONEncoder):
-    def default(self, o):
+    def default(self, o: Any) -> Any:
         if isinstance(o, enum.Enum):
             return o.value
         return super().default(o)
@@ -17,9 +21,9 @@ def fuzzy_match(term: str, candidates: list[str], *, cutoff: float = 0.6) -> str
     return matches[0] if matches else None
 
 
-def merge_result_sets(result_sets: list[list]) -> list:
+def merge_result_sets(result_sets: list[list[RetrievalResult]]) -> list[RetrievalResult]:
     """Merge multiple retrieval result sets, deduplicate by chunk_id, keep highest score."""
-    seen: dict = {}
+    seen: dict[UUID, RetrievalResult] = {}
     for result_set in result_sets:
         for r in result_set:
             if r.chunk_id not in seen or r.score > seen[r.chunk_id].score:

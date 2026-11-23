@@ -7,7 +7,7 @@ import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from langchain_core.load import dumpd
@@ -29,7 +29,9 @@ class _UniqueKeyLoader(yaml.SafeLoader):
     """SafeLoader that rejects duplicate mapping keys instead of keeping the last."""
 
 
-def _construct_mapping(loader: _UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False):
+def _construct_mapping(
+    loader: _UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
     loader.flatten_mapping(node)
     seen: set[object] = set()
     for key_node, _ in node.value:
@@ -256,7 +258,7 @@ def _load_hub(prompt_id: str, version: str | None) -> Prompt:
     )
 
 
-def _hub_client_instance():
+def _hub_client_instance() -> Any:
     """Build the LangSmith client once, with credentials from Settings.
 
     Passing the key and endpoint explicitly means Hub pulls work even when
@@ -284,7 +286,9 @@ def _pull_from_hub(identifier: str) -> ChatPromptTemplate:
     stale-while-revalidate, so repeat loads do not make a network call. A
     single client also reuses its HTTP connection pool across pulls.
     """
-    return _hub_client_instance().pull_prompt(identifier, skip_cache=False)
+    return cast(
+        ChatPromptTemplate, _hub_client_instance().pull_prompt(identifier, skip_cache=False)
+    )
 
 
 def _template_digest(template: ChatPromptTemplate) -> str:

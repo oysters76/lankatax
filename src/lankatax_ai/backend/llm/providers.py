@@ -34,7 +34,7 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
 
         return ChatGroq(
             model=model or DEFAULT_MODELS[LlmProvider.groq],
-            api_key=settings.groq_api_key.get_secret_value(),
+            api_key=settings.groq_api_key,
         )
 
     if provider is LlmProvider.deepseek:
@@ -44,7 +44,7 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
             raise ValueError("DEEPSEEK_API_KEY is not set")
         return ChatOpenAI(
             model=model or DEFAULT_MODELS[LlmProvider.deepseek],
-            api_key=settings.deepseek_api_key.get_secret_value(),
+            api_key=settings.deepseek_api_key,
             base_url=DEEPSEEK_BASE_URL,
         )
 
@@ -53,7 +53,7 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
 
         return ChatOpenAI(
             model=model or DEFAULT_MODELS[LlmProvider.openai],
-            api_key=settings.openai_api_key.get_secret_value(),
+            api_key=settings.openai_api_key,
         )
 
     raise ValueError(f"Unsupported LLM provider: {provider!r}")

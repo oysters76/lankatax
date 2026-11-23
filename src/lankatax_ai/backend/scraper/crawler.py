@@ -6,6 +6,7 @@ import random
 import re
 from collections.abc import Callable
 from enum import Enum
+from types import TracebackType
 from typing import ClassVar, Self
 from urllib.parse import urljoin
 
@@ -42,7 +43,7 @@ class AsyncCrawlerResult:
     error: AsyncCrawlerErrorKind | None
 
     @property
-    def is_error(self):
+    def is_error(self) -> bool:
         return self.error is not None
 
 
@@ -55,7 +56,7 @@ class AsyncCrawlerFetchResult:
     error: AsyncCrawlerErrorKind | None = None
 
     @property
-    def is_error(self):
+    def is_error(self) -> bool:
         return self.error is not None
 
 
@@ -100,7 +101,12 @@ class AsyncCrawler:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._client is None:
             return
         if self._client.is_closed:
@@ -108,21 +114,26 @@ class AsyncCrawler:
         await self._client.aclose()
         self._client = None
 
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         async with self._lock:
             await asyncio.sleep(random.uniform(self._min_delay, self._max_delay))
 
-    async def _wait_longer(self, attempt: int):
+    async def _wait_longer(self, attempt: int) -> None:
         await asyncio.sleep(2 ** (attempt + 2))
 
-    async def _wait_shorter(self, attempt: int):
+    async def _wait_shorter(self, attempt: int) -> None:
         await asyncio.sleep(2**attempt)
 
     async def fetch(self, url: str, attempts: int = 3) -> AsyncCrawlerResult:
+        client = self._client
+        if client is None:
+            return AsyncCrawlerResult(
+                url=url, status_code=-1, response=None, error=AsyncCrawlerErrorKind.exception
+            )
         try:
             for attempt in range(attempts):
                 await self._rate_limit()
-                response = await self._client.get(url)
+                response = await client.get(url)
                 sc = response.status_code
 
                 if sc in (200, 201):
@@ -203,11 +214,11 @@ class AsyncCrawler:
                 parts_html.append(str(body))
 
         # Collect PDF links
-        pdf_links = [
-            urljoin(base_url, a["href"])
-            for a in soup.find_all("a", href=True)
-            if a["href"].lower().endswith(".pdf")
-        ]
+        pdf_links: list[str] = []
+        for anchor in soup.find_all("a", href=True):
+            href = anchor["href"]
+            if isinstance(href, str) and href.lower().endswith(".pdf"):
+                pdf_links.append(urljoin(base_url, href))
 
         return AsyncCrawlerParsedPage(
             title=title,
@@ -222,14 +233,20 @@ class AsyncCrawler:
         if result.is_error:
             return AsyncCrawlerFetchResult(url=entry.url, entry=entry, error=result.error)
 
+        response = result.response
+        if response is None:
+            return AsyncCrawlerFetchResult(
+                url=entry.url, entry=entry, error=AsyncCrawlerErrorKind.unknown_error
+            )
+
         if entry.kind == DocumentKind.pdf:
             return AsyncCrawlerFetchResult(
                 url=entry.url,
                 entry=entry,
-                pdf_bytes=result.response.content,
+                pdf_bytes=response.content,
             )
 
-        parsed = self.parse_page(result.response.text, entry.url)
+        parsed = self.parse_page(response.text, entry.url)
         return AsyncCrawlerFetchResult(
             url=entry.url,
             entry=entry,

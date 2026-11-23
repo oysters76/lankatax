@@ -29,7 +29,8 @@ class Reranker:
         async with sem:
             messages = self._prompt.format_messages(query=query, text=result.content)
             response = await self._structured_llm.ainvoke(messages)
-            return RerankScorerResult(result=result, score=response.score / 10.0)
+            parsed = RelevanceScore.model_validate(response)
+            return RerankScorerResult(result=result, score=parsed.score / 10.0)
 
     async def rerank(
         self,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -16,7 +17,7 @@ class RetrievalResult:
     score: float
     vector_score: float | None
     keyword_score: float | None
-    metadata: dict
+    metadata: dict[str, Any]
     embedding: list[float] | None = None
 
 

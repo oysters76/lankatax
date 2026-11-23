@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy import Select
 
@@ -22,7 +23,9 @@ class MetadataFilters:
         return any([self.category, self.doc_type, self.after, self.before])
 
 
-def apply_metadata_filters(stmt: Select, filters: MetadataFilters) -> Select:
+def apply_metadata_filters[RowT: tuple[Any, ...]](
+    stmt: Select[RowT], filters: MetadataFilters
+) -> Select[RowT]:
     """Apply metadata WHERE clauses to an existing SQLAlchemy select statement.
 
     Joins chunks → documents when any filter is set, then adds WHERE clauses.

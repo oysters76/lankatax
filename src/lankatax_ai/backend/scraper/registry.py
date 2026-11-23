@@ -32,8 +32,8 @@ class ScrapableURL(BaseModel):
 
 class URLRegistry:
     def __init__(self, filepath: Path = _DEFAULT_REGISTRY):
-        self.registry_map = {}
-        self.registry_list = []
+        self.registry_map: dict[URLCategory, list[ScrapableURL]] = {}
+        self.registry_list: list[ScrapableURL] = []
         self._load(filepath)
 
     def _load(self, filepath: Path) -> None:

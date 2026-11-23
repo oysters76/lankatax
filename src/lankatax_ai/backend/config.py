@@ -63,7 +63,7 @@ class Settings(BaseSettings):
         return f"postgresql+asyncpg://{self.postgres_user}:{postgres_pwd}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db_name}"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # required fields come from env/.env
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),

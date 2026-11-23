@@ -66,7 +66,7 @@ def group_blocks(blocks: list[RawBlock]) -> list[list[RawBlock]]:
 def chunk_structural(doc: Document, config: ChunkConfig) -> list[Chunk]:
     logger.debug("Structural chunking %s (kind=%s)", doc.url, doc.document_kind)
     if doc.document_kind == DocumentKind.page.value:
-        blocks = parse_html_to_blocks(doc.raw_html)
+        blocks = parse_html_to_blocks(doc.raw_html or "")
         groups = group_blocks(blocks)
         logger.debug("Parsed %d blocks into %d groups", len(blocks), len(groups))
         texts = merge_blocks_to_chunks(groups, config)
