@@ -17,10 +17,12 @@ from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.search_analytics import SearchTiming
 from lankatax_ai.backend.rag.types import (
     PreprocessedQuery,
+    QueryType,
     RetrievalResult,
     SearchMode,
     SearchSource,
 )
+from lankatax_ai.backend.services.protocols import Embeddings
 from lankatax_ai.backend.services.search import limits
 from lankatax_ai.backend.services.utils import require_range
 from lankatax_ai.backend.types import MODEL_TOKEN_BUDGETS, LlmProvider
@@ -48,7 +50,32 @@ class RerankLike(Protocol):
     ) -> list[RetrievalResult]: ...
 
 
-RetrieverFactory = Callable[[AsyncSession], Retriever]
+class ResultCache(Protocol):
+    async def get(
+        self, query_text: str, query_embedding: list[float]
+    ) -> list[RetrievalResult] | None: ...
+
+    async def put(
+        self, query_text: str, query_embedding: list[float], results: list[RetrievalResult]
+    ) -> None: ...
+
+
+class Analytics(Protocol):
+    async def log_search(
+        self,
+        *,
+        query_text: str,
+        expanded_query: str | None,
+        query_type: QueryType,
+        search_mode: SearchMode,
+        top_score: float | None,
+        result_count: int,
+        timing: SearchTiming,
+        source: SearchSource,
+        llm_provider: LlmProvider | None = None,
+        cache_hit: bool = False,
+        multi_query: bool = False,
+    ) -> None: ...
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -118,3 +145,26 @@ class SearchOutcome:
     @property
     def has_results(self) -> bool:
         return bool(self.results)
+
+
+RetrieverFactory = Callable[[AsyncSession, SearchOptions], Retriever]
+ExpanderFactory = Callable[[LlmProvider], Expander]
+RerankerFactory = Callable[[LlmProvider, int], RerankLike]
+CacheFactory = Callable[[AsyncSession], ResultCache]
+AnalyticsFactory = Callable[[AsyncSession], Analytics]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class SearchDeps:
+    """Collaborators the search use case needs, wired by the caller.
+
+    The service never builds clients or adapters itself. ``build_search_deps``
+    provides the production wiring; tests pass fakes.
+    """
+
+    embeddings: Embeddings
+    retriever_factory: RetrieverFactory
+    expander_factory: ExpanderFactory
+    reranker_factory: RerankerFactory
+    cache_factory: CacheFactory
+    analytics_factory: AnalyticsFactory

@@ -1,9 +1,19 @@
-"""Search use case: options, outcome and the ``search`` entry point."""
+"""Search use case: options, outcome, deps and the ``search`` entry point."""
 
 from __future__ import annotations
 
-from lankatax_ai.backend.services.search import limits
+from lankatax_ai.backend.services.search.deps import build_search_deps
 from lankatax_ai.backend.services.search.service import search
-from lankatax_ai.backend.services.search.types import SearchOptions, SearchOutcome
+from lankatax_ai.backend.services.search.types import (
+    SearchDeps,
+    SearchOptions,
+    SearchOutcome,
+)
 
-__all__ = ["SearchOptions", "SearchOutcome", "limits", "search"]
+__all__ = [
+    "SearchDeps",
+    "SearchOptions",
+    "SearchOutcome",
+    "build_search_deps",
+    "search",
+]
