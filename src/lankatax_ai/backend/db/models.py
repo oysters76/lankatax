@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
@@ -10,21 +11,35 @@ from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from lankatax_ai.backend.types import (
+    ChunkStrategy,
+    DocumentKind,
+    LlmProvider,
+    QueryType,
+    SearchMode,
+    SearchSource,
+)
+
 
 class Base(DeclarativeBase):
     pass
 
 
-document_kind_enum = PgEnum("pdf", "page", name="document_kind_enum", create_type=True)
-chunk_strategy_enum = PgEnum(
-    "structural", "semantic", "recursive", name="chunk_strategy_enum", create_type=True
-)
-search_source_enum = PgEnum("cli", "api", name="search_source_enum", create_type=True)
-search_mode_enum = PgEnum("hybrid", "vector", "keyword", name="search_mode_enum", create_type=True)
-query_type_enum = PgEnum(
-    "factual", "calculation", "procedural", name="query_type_enum", create_type=True
-)
-llm_provider_enum = PgEnum("gemini", "groq", name="llm_provider_enum", create_type=True)
+def _pg_enum(name: str, python_enum: type[Enum]) -> PgEnum:
+    """Build a Postgres enum whose values are derived from a Python enum.
+
+    Keeping one source of truth stops the database type from drifting away from
+    the application vocabulary.
+    """
+    return PgEnum(*(member.value for member in python_enum), name=name, create_type=True)
+
+
+document_kind_enum = _pg_enum("document_kind_enum", DocumentKind)
+chunk_strategy_enum = _pg_enum("chunk_strategy_enum", ChunkStrategy)
+search_source_enum = _pg_enum("search_source_enum", SearchSource)
+search_mode_enum = _pg_enum("search_mode_enum", SearchMode)
+query_type_enum = _pg_enum("query_type_enum", QueryType)
+llm_provider_enum = _pg_enum("llm_provider_enum", LlmProvider)
 
 
 class Document(Base):
