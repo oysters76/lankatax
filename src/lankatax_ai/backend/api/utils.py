@@ -1,0 +1,176 @@
+"""FastAPI-specific helpers: link building, service mappers, stub replies.
+
+Routing policy lives here too: the two route-name sets below decide whether a
+link advertises ``auth_required`` and ``available``, so a route is described in
+exactly one place.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from lankatax_ai.backend.api.schemas import (
+    ErrorBody,
+    Link,
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
+    TimingModel,
+)
+from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
+from lankatax_ai.backend.rag.types import RetrievalResult
+from lankatax_ai.backend.services.search import SearchOptions, SearchOutcome
+from lankatax_ai.backend.types import SearchSource
+
+__all__ = [
+    "DOCS_ROUTES",
+    "PUBLIC_ROUTES",
+    "STUB_ROUTES",
+    "error_payload",
+    "link",
+    "not_implemented",
+    "to_search_options",
+    "to_search_response",
+]
+
+#: Routes that do not need a bearer token.
+PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token", "ask"})
+
+#: Declared routes that still answer 501.
+STUB_ROUTES: frozenset[str] = frozenset(
+    {
+        "ask",
+        "ingest",
+        "ingest_status",
+        "scrape",
+        "scrape_urls",
+        "scrape_status",
+        "jobs",
+    }
+)
+
+#: Documentation routes, guarded by their own setting.
+DOCS_ROUTES: frozenset[str] = frozenset({"swagger_ui_html", "redoc_html", "openapi"})
+
+
+def link(
+    request: Request,
+    name: str,
+    *,
+    method: str = "GET",
+    title: str | None = None,
+    **params: Any,
+) -> Link:
+    """Build one link from a route name, never from a literal path."""
+    href = str(request.url_for(name, **params))
+    auth_required = name not in PUBLIC_ROUTES
+    if name in DOCS_ROUTES:
+        auth_required = bool(getattr(request.app.state, "docs_protected", True))
+    return Link(
+        href=href,
+        method=method,
+        title=title,
+        available=name not in STUB_ROUTES,
+        auth_required=auth_required,
+    )
+
+
+def error_payload(
+    request: Request, *, code: str, detail: str, errors: list[dict[str, Any]] | None = None
+) -> ErrorBody:
+    """The single error body; 401s also advertise the token endpoint."""
+    links = {"api_root": link(request, "api_root")}
+    if code == "unauthorized":
+        links["token"] = link(request, "token", method="POST")
+    return ErrorBody(code=code, detail=detail, errors=errors, links=links)
+
+
+def not_implemented(
+    request: Request, *, name: str, phase: str, method: str = "GET", **related: str
+) -> JSONResponse:
+    """Answer a declared-but-unimplemented action without pretending it works."""
+    links = {"self": link(request, name, method=method), "api_root": link(request, "api_root")}
+    links.update({key: link(request, route) for key, route in related.items()})
+    body = ErrorBody(
+        code="not_implemented",
+        detail=f"Not implemented yet; arrives in {phase}",
+        links=links,
+    )
+    return JSONResponse(status_code=501, content=body.model_dump(mode="json"))
+
+
+def to_search_options(payload: SearchRequest) -> SearchOptions:
+    """Translate the request body into service options; the source is ours."""
+    return SearchOptions(
+        source=SearchSource.api,
+        mode=payload.mode,
+        filters=MetadataFilters(
+            category=payload.category,
+            doc_type=payload.doc_type,
+            after=payload.after,
+            before=payload.before,
+        ),
+        top_k=payload.top_k,
+        rerank=payload.rerank,
+        multi_query=payload.multi_query,
+        use_cache=payload.use_cache,
+        include_context=payload.include_context,
+        vector_weight=payload.vector_weight,
+        rerank_threshold=payload.rerank_threshold,
+        dedup_threshold=payload.dedup_threshold,
+        token_budget=payload.token_budget,
+        llm_provider=payload.llm_provider,
+    )
+
+
+def _result_item(result: RetrievalResult) -> SearchResultItem:
+    url = result.metadata.get("url") or result.metadata.get("from_url")
+    item_links: dict[str, Link] = {}
+    if isinstance(url, str):
+        title = result.metadata.get("document_title") or result.metadata.get("title")
+        item_links["source"] = Link(
+            href=url,
+            method="GET",
+            title=title if isinstance(title, str) else None,
+        )
+    return SearchResultItem(
+        chunk_id=result.chunk_id,
+        document_id=result.document_id,
+        content=result.content,
+        score=result.score,
+        vector_score=result.vector_score,
+        keyword_score=result.keyword_score,
+        metadata=result.metadata,
+        links=item_links,
+    )
+
+
+def to_search_response(
+    request: Request, payload: SearchRequest, outcome: SearchOutcome
+) -> SearchResponse:
+    """Map the service outcome onto the HTTP schema (never leak ``embedding``)."""
+    timings = outcome.timings
+    return SearchResponse(
+        query=payload.query,
+        expanded_query=outcome.processed_query.expanded,
+        query_type=outcome.processed_query.query_type,
+        results=[_result_item(result) for result in outcome.results],
+        timings=TimingModel(
+            embed_ms=timings.embed_ms,
+            search_ms=timings.search_ms,
+            rerank_ms=timings.rerank_ms,
+            total_ms=timings.total_ms,
+        ),
+        cache_hit=outcome.cache_hit,
+        multi_query=outcome.multi_query,
+        context=outcome.context,
+        links={
+            "self": link(request, "search", method="POST"),
+            "stats": link(request, "stats"),
+            "cache_stats": link(request, "cache_stats"),
+            "api_root": link(request, "api_root"),
+        },
+    )

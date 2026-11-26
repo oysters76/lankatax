@@ -55,6 +55,19 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LANGSMITH_ENDPOINT", "LANGCHAIN_ENDPOINT")
     )
 
+    # API authentication. Optional here so the CLI, ingest and tests keep
+    # working without them; the API validates them in create_app().
+    api_auth_username: str | None = None
+    api_auth_password_hash: SecretStr | None = None
+    api_auth_secret: SecretStr | None = Field(
+        None, validation_alias=AliasChoices("API_AUTH_SECRET", "API_KEY_TOKEN")
+    )
+    api_auth_token_expire_minutes: int = 30
+    api_auth_algorithm: str = "HS256"
+
+    # True = /docs, /redoc and /openapi.json require the bearer token.
+    api_docs_require_auth: bool = True
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @property
