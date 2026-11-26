@@ -3,7 +3,6 @@ from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
-from rich import print as rprint
 
 from lankatax_ai.backend.types import DocumentKind
 
@@ -32,6 +31,7 @@ class ScrapableURL(BaseModel):
 
 class URLRegistry:
     def __init__(self, filepath: Path = _DEFAULT_REGISTRY):
+        self.warnings: list[str] = []
         self.registry_map: dict[URLCategory, list[ScrapableURL]] = {}
         self.registry_list: list[ScrapableURL] = []
         self._load(filepath)
@@ -43,7 +43,7 @@ class URLRegistry:
                     url = ScrapableURL(**entry)
                     self.register(url)
                 except ValidationError as e:
-                    rprint(f"[bold yellow]⚠[/] Skipping bad entry: {e}")
+                    self.warnings.append(f"Skipping bad entry: {e}")
                     continue
 
     def register(self, entry: ScrapableURL) -> None:

@@ -38,6 +38,7 @@ def scrape(
 def _list_urls():
     console = Console()
     registry = URLRegistry()
+    _print_registry_warnings(registry, console)
 
     table = Table(title="URL Registry")
     table.add_column("URL", style="cyan")
@@ -54,6 +55,12 @@ def _list_urls():
         )
 
     console.print(table)
+
+
+def _print_registry_warnings(registry: URLRegistry, console: Console | None = None) -> None:
+    console = console or Console()
+    for warning in registry.warnings:
+        console.print(f"[bold yellow]⚠[/] {warning}")
 
 
 def _show_status():
@@ -83,6 +90,7 @@ async def _show_status_async():
 
 def _do_scrape(full: bool = False, no_discover: bool = False):
     registry = URLRegistry()
+    _print_registry_warnings(registry)
     metrics = {"succeeded": 0, "failed": 0}
     results = []
     interrupted = False
