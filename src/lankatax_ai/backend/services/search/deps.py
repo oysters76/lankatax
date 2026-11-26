@@ -12,12 +12,12 @@ from typing import cast
 from langchain_openai import OpenAIEmbeddings
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lankatax_ai.backend.analytics import SearchAnalytics
 from lankatax_ai.backend.llm import build_llm
 from lankatax_ai.backend.rag.multi_query_retriever import MultiQueryExpander
 from lankatax_ai.backend.rag.reranker import Reranker
 from lankatax_ai.backend.rag.result_cache import PgResultCache
 from lankatax_ai.backend.rag.retriever import HybridRetriever
-from lankatax_ai.backend.rag.search_analytics import SearchAnalytics
 from lankatax_ai.backend.services.protocols import Embeddings
 from lankatax_ai.backend.services.search.types import SearchDeps, SearchOptions
 

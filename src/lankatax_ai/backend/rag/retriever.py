@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.db.models import Chunk
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters, apply_metadata_filters
-from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode
+from lankatax_ai.backend.rag.types import RetrievalResult
+from lankatax_ai.backend.types import SearchMode
 
 logger = logging.getLogger(__name__)
 

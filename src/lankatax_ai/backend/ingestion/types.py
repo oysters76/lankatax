@@ -1,13 +1,7 @@
 import dataclasses
 from enum import Enum
 
-from lankatax_ai.backend.types import DocumentKind
-
-
-class ChunkStrategy(Enum):
-    structural = "structural"
-    semantic = "semantic"
-    recursive = "recursive"
+from lankatax_ai.backend.types import ChunkStrategy, DocumentKind
 
 
 class BlockType(Enum):

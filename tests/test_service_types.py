@@ -4,13 +4,8 @@ import dataclasses
 
 import pytest
 
-from lankatax_ai.backend.rag.search_analytics import SearchTiming
-from lankatax_ai.backend.rag.types import (
-    PreprocessedQuery,
-    QueryType,
-    SearchMode,
-    SearchSource,
-)
+from lankatax_ai.backend.analytics.types import SearchTiming
+from lankatax_ai.backend.rag.types import PreprocessedQuery
 from lankatax_ai.backend.services.errors import (
     NotFoundError,
     ServiceError,
@@ -18,7 +13,13 @@ from lankatax_ai.backend.services.errors import (
     ValidationError,
 )
 from lankatax_ai.backend.services.search import SearchOptions, SearchOutcome, limits
-from lankatax_ai.backend.types import MODEL_TOKEN_BUDGETS, LlmProvider
+from lankatax_ai.backend.types import (
+    MODEL_TOKEN_BUDGETS,
+    LlmProvider,
+    QueryType,
+    SearchMode,
+    SearchSource,
+)
 
 pytestmark = pytest.mark.unit
 

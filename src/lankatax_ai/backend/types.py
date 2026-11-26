@@ -6,6 +6,29 @@ class DocumentKind(Enum):
     page = "page"
 
 
+class ChunkStrategy(Enum):
+    structural = "structural"
+    semantic = "semantic"
+    recursive = "recursive"
+
+
+class SearchMode(Enum):
+    hybrid = "hybrid"
+    vector = "vector"
+    keyword = "keyword"
+
+
+class SearchSource(Enum):
+    cli = "cli"
+    api = "api"
+
+
+class QueryType(Enum):
+    factual = "factual"
+    calculation = "calculation"
+    procedural = "procedural"
+
+
 class LlmProvider(Enum):
     gemini = "gemini"
     groq = "groq"

@@ -2,11 +2,24 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from lankatax_ai.backend.types import QueryType, SearchMode, SearchSource
+
+__all__ = [
+    "CacheStats",
+    "PreprocessedQuery",
+    "QueryType",
+    "RelevanceScore",
+    "RerankScorerResult",
+    "ResultCacheBase",
+    "RetrievalResult",
+    "SearchMode",
+    "SearchSource",
+]
 
 
 @dataclasses.dataclass
@@ -21,12 +34,6 @@ class RetrievalResult:
     embedding: list[float] | None = None
 
 
-class SearchMode(Enum):
-    hybrid = "hybrid"
-    vector = "vector"
-    keyword = "keyword"
-
-
 class RelevanceScore(BaseModel):
     score: int = Field(description="Relevance score from 1 to 10")
 
@@ -35,17 +42,6 @@ class RelevanceScore(BaseModel):
 class RerankScorerResult:
     result: RetrievalResult
     score: float
-
-
-class SearchSource(Enum):
-    cli = "cli"
-    api = "api"
-
-
-class QueryType(Enum):
-    factual = "factual"
-    calculation = "calculation"
-    procedural = "procedural"
 
 
 @dataclasses.dataclass

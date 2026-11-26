@@ -6,10 +6,10 @@ from uuid import UUID, uuid4
 import pytest
 
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
-from lankatax_ai.backend.rag.types import RetrievalResult, SearchMode, SearchSource
+from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.errors import ValidationError
 from lankatax_ai.backend.services.search import SearchDeps, SearchOptions, search
-from lankatax_ai.backend.types import LlmProvider
+from lankatax_ai.backend.types import LlmProvider, SearchMode, SearchSource
 
 pytestmark = pytest.mark.unit
 

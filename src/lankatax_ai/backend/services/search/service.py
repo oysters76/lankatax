@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import time
 
+from lankatax_ai.backend.analytics.types import SearchTiming
 from lankatax_ai.backend.llm.embeddings import EMBEDDING_MODEL
 from lankatax_ai.backend.rag.context_builder import ContextBuilder
 from lankatax_ai.backend.rag.query_preprocessor import QueryPreprocessor
-from lankatax_ai.backend.rag.search_analytics import SearchTiming
 from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.errors import ValidationError
 from lankatax_ai.backend.services.protocols import SessionFactory

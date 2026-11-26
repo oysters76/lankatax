@@ -6,7 +6,8 @@ from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.recursive import chunk_recursive
 from lankatax_ai.backend.ingestion.chunker.semantic import chunk_semantic
 from lankatax_ai.backend.ingestion.chunker.structural import chunk_structural
-from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig, ChunkStrategy
+from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
+from lankatax_ai.backend.types import ChunkStrategy
 
 logger = logging.getLogger(__name__)
 

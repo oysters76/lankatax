@@ -3,7 +3,8 @@ from __future__ import annotations
 import importlib.resources
 import json
 
-from lankatax_ai.backend.rag.types import PreprocessedQuery, QueryType
+from lankatax_ai.backend.rag.types import PreprocessedQuery
+from lankatax_ai.backend.types import QueryType
 from lankatax_ai.backend.utils import fuzzy_match
 
 

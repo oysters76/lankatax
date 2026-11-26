@@ -10,8 +10,8 @@ from sqlalchemy import select
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.vector_store import store_chunks
 from lankatax_ai.backend.rag.retriever import HybridRetriever
-from lankatax_ai.backend.rag.types import SearchMode
 from lankatax_ai.backend.scraper.storage import save_documents
+from lankatax_ai.backend.types import SearchMode
 from tests.helpers import make_chunk, make_document
 
 pytestmark = pytest.mark.db
