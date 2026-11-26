@@ -1,11 +1,11 @@
 from lankatax_ai.backend.db.models import Document
+from lankatax_ai.backend.documents.page_marker import page_numbers, strip_page_markers
 from lankatax_ai.backend.ingestion.types import (
     Chunk,
     ChunkCitationMeta,
     ChunkConfig,
     RawBlock,
 )
-from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER_PATTERN
 from lankatax_ai.backend.types import DocumentKind
 
 
@@ -14,11 +14,10 @@ def token_size(s: str) -> int:
 
 
 def extract_pages_and_clean(text: str) -> tuple[int | None, int | None, str]:
-    pages = [int(p) for p in PAGE_MARKER_PATTERN.findall(text)]
-    cleaned = PAGE_MARKER_PATTERN.sub("", text)
+    pages = page_numbers(text)
     page_start = pages[0] if pages else None
     page_end = pages[-1] if pages else None
-    return page_start, page_end, cleaned.strip()
+    return page_start, page_end, strip_page_markers(text).strip()
 
 
 def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) -> list[str]:

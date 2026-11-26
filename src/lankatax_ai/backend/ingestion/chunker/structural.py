@@ -3,6 +3,7 @@ import logging
 from bs4 import BeautifulSoup as bs
 
 from lankatax_ai.backend.db.models import Document
+from lankatax_ai.backend.documents.page_marker import format_page_marker, split_pages
 from lankatax_ai.backend.ingestion.chunker.common import (
     extract_pages_and_clean,
     make_chunk,
@@ -14,7 +15,6 @@ from lankatax_ai.backend.ingestion.types import (
     ChunkConfig,
     RawBlock,
 )
-from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER
 from lankatax_ai.backend.types import DocumentKind
 
 RAW_BLOCK_MAP: dict[str, BlockType] = {
@@ -72,11 +72,16 @@ def chunk_structural(doc: Document, config: ChunkConfig) -> list[Chunk]:
         texts = merge_blocks_to_chunks(groups, config)
         return [make_chunk(t, doc, config, i) for i, t in enumerate(texts)]
     elif doc.document_kind == DocumentKind.pdf.value:
-        pages = doc.raw_text.split(PAGE_MARKER.split("{")[0])
+        pages = split_pages(doc.raw_text)
         blocks = [
-            RawBlock(block_type=BlockType.paragraph, content=p.strip()) for p in pages if p.strip()
+            RawBlock(
+                block_type=BlockType.paragraph,
+                content=format_page_marker(page) + body,
+            )
+            for page, body in pages
+            if body.strip()
         ]
-        texts = merge_blocks_to_chunks([blocks], config)
+        texts = [t for t in merge_blocks_to_chunks([blocks], config) if t.strip()]
         chunks = []
         for i, t in enumerate(texts):
             page_start, page_end, cleaned = extract_pages_and_clean(t)

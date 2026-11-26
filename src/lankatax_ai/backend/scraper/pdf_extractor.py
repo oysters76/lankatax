@@ -1,10 +1,14 @@
 import io
-import re
 
 import pdfplumber
 
-PAGE_MARKER = "<!--PAGE:{n}-->"
-PAGE_MARKER_PATTERN = re.compile(r"<!--PAGE:(\d+)-->")
+from lankatax_ai.backend.documents.page_marker import (
+    PAGE_MARKER,
+    PAGE_MARKER_PATTERN,
+    format_page_marker,
+)
+
+__all__ = ["PAGE_MARKER", "PAGE_MARKER_PATTERN", "format_page_marker", "pdf_to_text", "safe_str"]
 
 
 def safe_str(s: str | None) -> str:
@@ -15,7 +19,7 @@ def pdf_to_text(pdf_bytes: bytes) -> str:
     text: str = ""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
-            page_text = PAGE_MARKER.format(n=i)
+            page_text = format_page_marker(i)
             page_text += safe_str(page.extract_text())
             text += page_text
     return text

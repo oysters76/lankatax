@@ -1,4 +1,14 @@
-from lankatax_ai.backend.scraper.pdf_extractor import PAGE_MARKER, PAGE_MARKER_PATTERN
+from lankatax_ai.backend.documents.page_marker import (
+    PAGE_MARKER,
+    PAGE_MARKER_PATTERN,
+    format_page_marker,
+    page_numbers,
+    split_pages,
+    strip_page_markers,
+)
+from lankatax_ai.backend.ingestion.chunker.structural import chunk_structural
+from lankatax_ai.backend.ingestion.types import ChunkConfig
+from tests.helpers import make_document
 
 
 def test_pattern_matches_marker_single_digit():
@@ -36,3 +46,45 @@ def test_marker_and_pattern_stay_in_sync():
         match = PAGE_MARKER_PATTERN.search(marker)
         assert match is not None, f"PAGE_MARKER_PATTERN failed to match PAGE_MARKER for page {n}"
         assert match.group(1) == str(n), f"Extracted {match.group(1)} but expected {n}"
+
+
+def test_split_pages_returns_numbers_and_bodies():
+    text = format_page_marker(1) + "First." + format_page_marker(2) + "Second."
+
+    assert split_pages(text) == [(1, "First."), (2, "Second.")]
+
+
+def test_split_pages_treats_unmarked_text_as_page_one():
+    assert split_pages("No markers here.") == [(1, "No markers here.")]
+
+
+def test_split_pages_attaches_leading_text_to_first_page():
+    text = "Preamble." + format_page_marker(1) + "First."
+
+    assert split_pages(text) == [(1, "Preamble.First.")]
+
+
+def test_page_numbers_and_strip_agree():
+    text = format_page_marker(1) + "First." + format_page_marker(7) + "Second."
+
+    assert page_numbers(text) == [1, 7]
+    assert strip_page_markers(text) == "First.Second."
+
+
+def test_structural_pdf_chunks_keep_page_citations_and_clean_content():
+    doc = make_document(
+        document_kind="pdf",
+        raw_text=format_page_marker(1)
+        + "First page text."
+        + format_page_marker(2)
+        + "Second page text.",
+        raw_html="",
+    )
+
+    chunks = chunk_structural(doc, ChunkConfig())
+
+    assert chunks
+    assert all("<!--PAGE" not in chunk.content for chunk in chunks)
+    assert all("-->" not in chunk.content for chunk in chunks)
+    assert chunks[0].citation.page_start == 1
+    assert chunks[0].citation.page_end == 2
