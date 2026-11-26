@@ -14,6 +14,7 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.analytics.types import SearchLogWriter, SearchTiming
+from lankatax_ai.backend.cache.types import ResultCache
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.types import (
     PreprocessedQuery,
@@ -50,16 +51,6 @@ class RerankLike(Protocol):
     async def rerank(
         self, query: str, results: list[RetrievalResult], *, top_k: int
     ) -> list[RetrievalResult]: ...
-
-
-class ResultCache(Protocol):
-    async def get(
-        self, query_text: str, query_embedding: list[float]
-    ) -> list[RetrievalResult] | None: ...
-
-    async def put(
-        self, query_text: str, query_embedding: list[float], results: list[RetrievalResult]
-    ) -> None: ...
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
