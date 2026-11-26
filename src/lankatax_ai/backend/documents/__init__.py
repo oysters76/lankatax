@@ -17,6 +17,7 @@ from lankatax_ai.backend.documents.page_marker import (
     strip_page_markers,
 )
 from lankatax_ai.backend.documents.store import (
+    DocumentStore,
     ScrapeStatusRecord,
     get_all_document_ids,
     get_document_by_id,
@@ -31,6 +32,7 @@ from lankatax_ai.backend.documents.store import (
 __all__ = [
     "PAGE_MARKER",
     "PAGE_MARKER_PATTERN",
+    "DocumentStore",
     "ScrapeStatusRecord",
     "format_page_marker",
     "get_all_document_ids",
