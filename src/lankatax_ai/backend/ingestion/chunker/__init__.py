@@ -1,19 +1,17 @@
 import logging
 
-from langchain_openai import OpenAIEmbeddings
-
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.recursive import chunk_recursive
 from lankatax_ai.backend.ingestion.chunker.semantic import chunk_semantic
 from lankatax_ai.backend.ingestion.chunker.structural import chunk_structural
-from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
+from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig, DocumentEmbeddings
 from lankatax_ai.backend.types import ChunkStrategy
 
 logger = logging.getLogger(__name__)
 
 
 async def chunk_document(
-    doc: Document, config: ChunkConfig, model: OpenAIEmbeddings | None = None
+    doc: Document, config: ChunkConfig, model: DocumentEmbeddings | None = None
 ) -> list[Chunk]:
     logger.info("Chunking doc %s with strategy=%s", doc.url, config.strategy.value)
     if config.strategy == ChunkStrategy.structural:

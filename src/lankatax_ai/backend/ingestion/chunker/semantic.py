@@ -4,11 +4,9 @@ import re
 import time
 from collections.abc import Callable
 
-from langchain_openai import OpenAIEmbeddings
-
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.ingestion.chunker.common import extract_pages_and_clean, make_chunk
-from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig
+from lankatax_ai.backend.ingestion.types import Chunk, ChunkConfig, DocumentEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ def _append_chunk(
 
 
 async def chunk_semantic(
-    doc: Document, config: ChunkConfig, model: OpenAIEmbeddings
+    doc: Document, config: ChunkConfig, model: DocumentEmbeddings
 ) -> list[Chunk]:
     sentences = split_sentences(doc.raw_text)
     logger.debug("Semantic chunking %s — %d sentences", doc.url, len(sentences))

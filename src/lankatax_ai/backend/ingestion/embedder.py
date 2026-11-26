@@ -2,14 +2,12 @@ import dataclasses
 import logging
 import time
 
-from langchain_openai import OpenAIEmbeddings
-
-from lankatax_ai.backend.ingestion.types import Chunk
+from lankatax_ai.backend.ingestion.types import Chunk, DocumentEmbeddings
 
 logger = logging.getLogger(__name__)
 
 
-async def embed_chunks(model: OpenAIEmbeddings, chunks: list[Chunk]) -> list[Chunk]:
+async def embed_chunks(model: DocumentEmbeddings, chunks: list[Chunk]) -> list[Chunk]:
     logger.debug("Embedding %d chunks", len(chunks))
     texts: list[str] = [c.content for c in chunks]
     t0 = time.perf_counter()

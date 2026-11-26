@@ -1,6 +1,10 @@
 import dataclasses
+from collections.abc import Callable
 from enum import Enum
+from typing import Protocol
+from uuid import UUID
 
+from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.types import ChunkStrategy, DocumentKind
 
 
@@ -43,3 +47,53 @@ class ChunkConfig:
     max_tokens: int = 512
     overlap_tokens: int = 75
     strategy: ChunkStrategy = ChunkStrategy.structural
+
+
+@dataclasses.dataclass(slots=True)
+class IngestionResult:
+    docs_processed: int = 0
+    chunks_created: int = 0
+    errors: list[str] = dataclasses.field(default_factory=list)
+    tokens_used: int = 0
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class IngestionStatus:
+    total_documents: int
+    pending: int
+    ingested: int
+
+
+class DocumentEmbeddings(Protocol):
+    """The slice of an embeddings client the ingestion pipeline needs."""
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
+
+# Called after each document: (document id, chunks, title, tokens, error).
+ProgressCallback = Callable[[UUID, int, str, int, str | None], None]
+
+
+class IngestionRepository(Protocol):
+    """Persistence the ingestion pipeline needs.
+
+    The repository is also the unit of work: the orchestrator commits after each
+    document and rolls back a failed one through it, so the same flow works
+    whether the caller passes a request-scoped session or a fresh one.
+    """
+
+    async def get_document(self, document_id: UUID) -> Document | None: ...
+
+    async def pending_document_ids(self) -> list[UUID]: ...
+
+    async def all_document_ids(self) -> list[UUID]: ...
+
+    async def status(self) -> IngestionStatus: ...
+
+    async def replace_chunks(self, document_id: UUID, chunks: list[Chunk]) -> int: ...
+
+    async def mark_ingested(self, document_id: UUID, content_hash: str) -> None: ...
+
+    async def commit(self) -> None: ...
+
+    async def rollback(self) -> None: ...
