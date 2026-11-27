@@ -15,9 +15,38 @@ LANGSMITH_VARS = (
     "LANGSMITH_ENDPOINT",
 )
 
+HATCHET_VARS = (
+    "HATCHET_CLIENT_TOKEN",
+    "HATCHET_CLIENT_TLS_STRATEGY",
+    "HATCHET_DASHBOARD_URL",
+    "HATCHET_WORKER_NAME",
+    "HATCHET_WORKER_SLOTS",
+)
+
+JOB_VARS = (
+    "JOB_REFRESH_CRON",
+    "JOB_CACHE_EXPIRE_CRON",
+    "JOB_EVAL_CRON",
+    "JOB_SCRAPE_TIMEOUT_SECONDS",
+    "JOB_INGEST_TIMEOUT_SECONDS",
+    "JOB_CACHE_TIMEOUT_SECONDS",
+    "JOB_EVAL_TIMEOUT_SECONDS",
+    "JOB_SCHEDULE_TIMEOUT_SECONDS",
+    "JOB_MAX_TOKENS_PER_RUN",
+    "JOB_MAX_COST_USD",
+    "JOB_SCRAPE_MAX_URLS",
+    "JOB_INGEST_MAX_DOCUMENTS",
+    "JOB_ENQUEUE_RATE_LIMIT_PER_MINUTE",
+)
+
 
 def _clear_langsmith(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in LANGSMITH_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _clear_hatchet_and_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (*HATCHET_VARS, *JOB_VARS):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -83,6 +112,121 @@ def test_prompt_source_is_read_from_env(monkeypatch):
 
 def test_unknown_prompt_source_fails_at_startup(monkeypatch):
     monkeypatch.setenv("LANKATAX_PROMPT_SOURCE", "s3")
+
+    with pytest.raises(ValidationError):
+        _load()
+
+
+def test_hatchet_settings_are_read(monkeypatch):
+    _clear_hatchet_and_jobs(monkeypatch)
+    monkeypatch.setenv("HATCHET_CLIENT_TOKEN", "hatchet-token")
+    monkeypatch.setenv("HATCHET_CLIENT_TLS_STRATEGY", "none")
+    monkeypatch.setenv("HATCHET_DASHBOARD_URL", "https://cloud.hatchet.run")
+    monkeypatch.setenv("HATCHET_WORKER_NAME", "lankatax-pipeline")
+    monkeypatch.setenv("HATCHET_WORKER_SLOTS", "3")
+
+    settings = _load()
+
+    assert settings.hatchet_client_token is not None
+    assert settings.hatchet_client_token.get_secret_value() == "hatchet-token"
+    assert settings.hatchet_client_tls_strategy == "none"
+    assert settings.hatchet_dashboard_url == "https://cloud.hatchet.run"
+    assert settings.hatchet_worker_name == "lankatax-pipeline"
+    assert settings.hatchet_worker_slots == 3
+
+
+def test_job_policy_defaults(monkeypatch):
+    _clear_hatchet_and_jobs(monkeypatch)
+
+    settings = _load()
+
+    assert settings.hatchet_client_token is None
+    assert settings.hatchet_client_tls_strategy is None
+    assert settings.hatchet_worker_name == "lankatax-worker"
+    assert settings.hatchet_worker_slots == 2
+    assert settings.job_refresh_cron == "0 2 * * *"
+    assert settings.job_cache_expire_cron == "0 3 * * *"
+    assert settings.job_eval_cron == "0 4 * * 1"
+    assert settings.job_scrape_timeout_seconds == 1800
+    assert settings.job_ingest_timeout_seconds == 7200
+    assert settings.job_cache_timeout_seconds == 300
+    assert settings.job_eval_timeout_seconds == 3600
+    assert settings.job_schedule_timeout_seconds == 3600
+    assert settings.job_max_tokens_per_run == 1_000_000
+    assert settings.job_max_cost_usd == 1.0
+    assert settings.job_scrape_max_urls == 1000
+    assert settings.job_ingest_max_documents == 500
+    assert settings.job_enqueue_rate_limit_per_minute == 10
+
+
+def test_job_policy_is_read_from_env(monkeypatch):
+    _clear_hatchet_and_jobs(monkeypatch)
+    monkeypatch.setenv("JOB_REFRESH_CRON", "15 1 * * *")
+    monkeypatch.setenv("JOB_SCRAPE_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("JOB_MAX_COST_USD", "0.25")
+
+    settings = _load()
+
+    assert settings.job_refresh_cron == "15 1 * * *"
+    assert settings.job_scrape_timeout_seconds == 60
+    assert settings.job_max_cost_usd == 0.25
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        pytest.param("HATCHET_WORKER_SLOTS", "0", id="worker-slots-zero"),
+        pytest.param("HATCHET_WORKER_SLOTS", "101", id="worker-slots-too-high"),
+        pytest.param("JOB_SCRAPE_TIMEOUT_SECONDS", "0", id="scrape-timeout-zero"),
+        pytest.param("JOB_INGEST_TIMEOUT_SECONDS", "0", id="ingest-timeout-zero"),
+        pytest.param("JOB_CACHE_TIMEOUT_SECONDS", "0", id="cache-timeout-zero"),
+        pytest.param("JOB_EVAL_TIMEOUT_SECONDS", "0", id="eval-timeout-zero"),
+        pytest.param("JOB_SCHEDULE_TIMEOUT_SECONDS", "0", id="schedule-timeout-zero"),
+        pytest.param("JOB_MAX_TOKENS_PER_RUN", "0", id="token-budget-zero"),
+        pytest.param("JOB_MAX_COST_USD", "0", id="cost-budget-zero"),
+        pytest.param("JOB_MAX_COST_USD", "-0.01", id="cost-budget-negative"),
+        pytest.param("JOB_MAX_COST_USD", "inf", id="cost-budget-infinite"),
+        pytest.param("JOB_SCRAPE_MAX_URLS", "0", id="scrape-max-urls-zero"),
+        pytest.param("JOB_INGEST_MAX_DOCUMENTS", "0", id="ingest-max-documents-zero"),
+        pytest.param(
+            "JOB_ENQUEUE_RATE_LIMIT_PER_MINUTE",
+            "0",
+            id="enqueue-rate-limit-zero",
+        ),
+    ],
+)
+def test_job_policy_rejects_invalid_limits(monkeypatch, name, value):
+    _clear_hatchet_and_jobs(monkeypatch)
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValidationError):
+        _load()
+
+
+def test_job_policy_accepts_boundary_limits(monkeypatch):
+    _clear_hatchet_and_jobs(monkeypatch)
+    monkeypatch.setenv("HATCHET_WORKER_SLOTS", "100")
+    monkeypatch.setenv("JOB_SCRAPE_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("JOB_INGEST_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("JOB_CACHE_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("JOB_EVAL_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("JOB_SCHEDULE_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("JOB_MAX_TOKENS_PER_RUN", "1")
+    monkeypatch.setenv("JOB_MAX_COST_USD", "0.01")
+    monkeypatch.setenv("JOB_SCRAPE_MAX_URLS", "1")
+    monkeypatch.setenv("JOB_INGEST_MAX_DOCUMENTS", "1")
+    monkeypatch.setenv("JOB_ENQUEUE_RATE_LIMIT_PER_MINUTE", "1")
+
+    settings = _load()
+
+    assert settings.hatchet_worker_slots == 100
+    assert settings.job_max_cost_usd == 0.01
+    assert settings.job_max_tokens_per_run == 1
+
+
+def test_unknown_hatchet_tls_strategy_fails_at_startup(monkeypatch):
+    _clear_hatchet_and_jobs(monkeypatch)
+    monkeypatch.setenv("HATCHET_CLIENT_TLS_STRATEGY", "bogus")
 
     with pytest.raises(ValidationError):
         _load()

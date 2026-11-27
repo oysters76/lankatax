@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -67,6 +68,33 @@ class Settings(BaseSettings):
 
     # True = /docs, /redoc and /openapi.json require the bearer token.
     api_docs_require_auth: bool = True
+
+    # Hatchet background jobs. The token is optional here so the CLI, ingest
+    # and tests keep working without Hatchet; job wiring validates it later.
+    hatchet_client_token: SecretStr | None = None
+    hatchet_client_tls_strategy: Literal["tls", "none"] | None = None
+    hatchet_dashboard_url: str | None = None
+    hatchet_worker_name: str = "lankatax-worker"
+    hatchet_worker_slots: int = Field(2, ge=1, le=100)
+
+    # Scheduled jobs. Expressions are UTC and evaluated by Hatchet.
+    job_refresh_cron: str = "0 2 * * *"
+    job_cache_expire_cron: str = "0 3 * * *"
+    job_eval_cron: str = "0 4 * * 1"
+
+    # Per-job execution limits. Hatchet defaults are much shorter than a crawl.
+    job_scrape_timeout_seconds: int = Field(1800, gt=0)
+    job_ingest_timeout_seconds: int = Field(7200, gt=0)
+    job_cache_timeout_seconds: int = Field(300, gt=0)
+    job_eval_timeout_seconds: int = Field(3600, gt=0)
+    job_schedule_timeout_seconds: int = Field(3600, gt=0)
+
+    # Guardrails for a single run.
+    job_max_tokens_per_run: int = Field(1_000_000, gt=0)
+    job_max_cost_usd: float = Field(1.0, gt=0, allow_inf_nan=False)
+    job_scrape_max_urls: int = Field(1000, gt=0)
+    job_ingest_max_documents: int = Field(500, gt=0)
+    job_enqueue_rate_limit_per_minute: int = Field(10, gt=0)
 
     model_config = SettingsConfigDict(env_file=".env")
 
