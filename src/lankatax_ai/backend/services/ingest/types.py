@@ -8,7 +8,7 @@ only adds the request shape and the wiring the use case needs.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from uuid import UUID
 
@@ -27,6 +27,7 @@ from lankatax_ai.backend.services.errors import ValidationError
 
 __all__ = [
     "ChunkConfig",
+    "CorpusFinalizer",
     "DocumentEmbeddings",
     "EmbeddingPolicy",
     "IngestDeps",
@@ -68,6 +69,7 @@ class IngestOptions:
 
 
 RepositoryFactory = Callable[[AsyncSession], IngestionRepository]
+CorpusFinalizer = Callable[[str | None], Awaitable[int]]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -77,3 +79,4 @@ class IngestDeps:
     repository_factory: RepositoryFactory
     embeddings: DocumentEmbeddings
     embedding_policy: EmbeddingPolicy
+    corpus_finalizer: CorpusFinalizer

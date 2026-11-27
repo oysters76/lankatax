@@ -44,6 +44,15 @@ class _StubEmbeddings:
         return [[0.1] * 4 for _ in texts]
 
 
+class _StubFinalizer:
+    def __init__(self) -> None:
+        self.calls: list[str | None] = []
+
+    async def __call__(self, run_id: str | None) -> int:
+        self.calls.append(run_id)
+        return 1
+
+
 class _StubRepository:
     def __init__(
         self,
@@ -97,11 +106,16 @@ def _doc(**overrides):
     return make_document(**(defaults | overrides))
 
 
-def _deps(repo: _StubRepository, embeddings: _StubEmbeddings | None = None) -> IngestDeps:
+def _deps(
+    repo: _StubRepository,
+    embeddings: _StubEmbeddings | None = None,
+    finalizer: _StubFinalizer | None = None,
+) -> IngestDeps:
     return IngestDeps(
         repository_factory=lambda _session: repo,
         embeddings=embeddings or _StubEmbeddings(),
         embedding_policy=EmbeddingPolicy(),
+        corpus_finalizer=finalizer or _StubFinalizer(),
     )
 
 
@@ -125,6 +139,33 @@ async def test_ingests_pending_documents():
     assert len(repo.replaced) == 2
     assert len(repo.marked) == 2
     assert embeddings.calls
+
+
+async def test_ingest_finalizes_corpus_with_run_id():
+    repo = _StubRepository([_doc()])
+    finalizer = _StubFinalizer()
+
+    await ingest(
+        IngestOptions(target=IngestTarget.pending),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(repo, finalizer=finalizer),
+        run_id="run-1",
+    )
+
+    assert finalizer.calls == ["run-1"]
+
+
+async def test_ingest_finalizes_corpus_even_with_no_documents():
+    repo = _StubRepository([])
+    finalizer = _StubFinalizer()
+
+    await ingest(
+        IngestOptions(target=IngestTarget.pending),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(repo, finalizer=finalizer),
+    )
+
+    assert finalizer.calls == [None]
 
 
 async def test_ingests_all_documents():

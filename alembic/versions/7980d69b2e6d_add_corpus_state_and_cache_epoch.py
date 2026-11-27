@@ -26,7 +26,6 @@ def upgrade() -> None:
         "corpus_state",
         sa.Column("id", sa.Integer(), server_default="1", nullable=False),
         sa.Column("epoch", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("last_scrape_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("last_ingest_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("last_refresh_run_id", sa.Text(), nullable=True),
         sa.Column(
