@@ -9,13 +9,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.cache.limits import DEFAULT_TTL_HOURS, SIMILARITY_THRESHOLD
 from lankatax_ai.backend.cache.types import CacheStats
-from lankatax_ai.backend.db.models import CacheEntry
+from lankatax_ai.backend.db.models import CacheEntry, CorpusState
 from lankatax_ai.backend.rag.types import RetrievalResult
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,10 @@ class PgResultCache:
         self._similarity_threshold = similarity_threshold
         self._ttl_hours = ttl_hours
 
+    async def _current_epoch(self) -> int:
+        epoch = await self._session.scalar(select(CorpusState.epoch).where(CorpusState.id == 1))
+        return 0 if epoch is None else epoch
+
     async def get(
         self, query_text: str, query_embedding: list[float]
     ) -> list[RetrievalResult] | None:
@@ -40,10 +44,14 @@ class PgResultCache:
         distance = CacheEntry.query_embedding.cosine_distance(query_embedding).label("distance")
         max_distance = 1.0 - self._similarity_threshold
         cutoff = datetime.now(UTC) - timedelta(hours=self._ttl_hours)
+        epoch = await self._current_epoch()
 
         stmt = (
             select(CacheEntry.id, CacheEntry.response, distance)
-            .where(CacheEntry.created_at >= cutoff)
+            .where(
+                CacheEntry.created_at >= cutoff,
+                CacheEntry.corpus_epoch == epoch,
+            )
             .order_by(distance)
             .limit(1)
         )
@@ -74,16 +82,19 @@ class PgResultCache:
         self, query_text: str, query_embedding: list[float], results: list[RetrievalResult]
     ) -> None:
         """Cache search results for a query."""
+        epoch = await self._current_epoch()
         entry = CacheEntry(
             query_text=query_text,
             query_embedding=query_embedding,
             response=self._serialize_results(results),
+            corpus_epoch=epoch,
         )
         self._session.add(entry)
-        logger.debug("Cached %d results for query=%r", len(results), query_text)
+        logger.debug("Cached %d results for query=%r (epoch=%d)", len(results), query_text, epoch)
 
     async def get_stats(self) -> CacheStats:
-        """Compute cache statistics."""
+        """Compute cache statistics for the current corpus epoch."""
+        epoch = await self._current_epoch()
         summary = (
             (
                 await self._session.execute(
@@ -92,6 +103,8 @@ class PgResultCache:
                         func.coalesce(func.sum(CacheEntry.hit_count), 0).label("hits"),
                         func.min(CacheEntry.created_at).label("oldest"),
                     )
+                    .select_from(CacheEntry)
+                    .where(CacheEntry.corpus_epoch == epoch)
                 )
             )
             .mappings()
@@ -121,13 +134,19 @@ class PgResultCache:
         return deleted
 
     async def invalidate_expired(self) -> int:
-        """Remove entries older than TTL. Returns count removed."""
+        """Remove expired entries and entries from older corpus epochs."""
         cutoff = datetime.now(UTC) - timedelta(hours=self._ttl_hours)
+        epoch = await self._current_epoch()
         result = await self._session.execute(
-            delete(CacheEntry).where(CacheEntry.created_at < cutoff)
+            delete(CacheEntry).where(
+                or_(
+                    CacheEntry.created_at < cutoff,
+                    CacheEntry.corpus_epoch < epoch,
+                )
+            )
         )
         deleted = cast(CursorResult[Any], result).rowcount
-        logger.debug("Invalidated %d expired cache entries", deleted)
+        logger.debug("Invalidated %d expired cache entries (epoch=%d)", deleted, epoch)
         return deleted
 
     @staticmethod
