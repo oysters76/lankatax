@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.documents import DocumentStore
@@ -71,3 +73,27 @@ async def test_mark_ingested_moves_document_out_of_pending(clean_session):
 
     assert await store.pending_ids() == []
     assert await store.all_ids() == [doc_id]
+
+
+async def test_rescrape_refreshes_scraped_at(clean_session):
+    store = DocumentStore(clean_session)
+    url = "https://www.ird.gov.lk/store7"
+    doc = make_document(url=url, content_hash="old-hash")
+    await store.save([doc])
+    await store.commit()
+    doc_id = await _id_for(clean_session, url)
+
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    await clean_session.execute(
+        update(Document).where(Document.id == doc_id).values(scraped_at=old, updated_at=old)
+    )
+    await clean_session.commit()
+
+    await store.save([make_document(url=url, content_hash="new-hash")])
+    await store.commit()
+
+    found = await store.get(doc_id)
+    assert found is not None
+    assert found.content_hash == "new-hash"
+    assert found.scraped_at > old
+    assert found.updated_at > old

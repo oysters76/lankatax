@@ -57,6 +57,7 @@ class DocumentStore:
                     "content_hash": stmt.excluded.content_hash,
                     "raw_html": stmt.excluded.raw_html,
                     "document_kind": stmt.excluded.document_kind,
+                    "scraped_at": func.now(),
                     "updated_at": func.now(),
                 },
             )
