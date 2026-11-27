@@ -63,8 +63,13 @@ class DocumentStore:
             )
             await self._session.execute(stmt)
 
-    async def hash_map(self) -> dict[str, str]:
+    async def hash_map(self, urls: list[str] | None = None) -> dict[str, str]:
+        """Return content hashes for all documents or only the given URLs."""
+        if urls is not None and not urls:
+            return {}
         stmt = select(Document.url, Document.content_hash)
+        if urls is not None:
+            stmt = stmt.where(Document.url.in_(urls))
         rows = (await self._session.execute(stmt)).all()
         return {row.url: row.content_hash for row in rows}
 

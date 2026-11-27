@@ -7,7 +7,8 @@ persists.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import inspect
+from collections.abc import Awaitable, Callable
 
 from lankatax_ai.backend.documents import ScrapeStatusRecord
 from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
@@ -42,35 +43,26 @@ async def crawl(
     on_batch: BatchCallback | None = None,
     should_stop: StopCheck | None = None,
     batch_size: int = 25,
+    retain_results: bool = True,
 ) -> CrawlOutcome:
     """Crawl the registry and, unless disabled, newly discovered PDFs.
 
     A ``KeyboardInterrupt`` stops the crawl and returns the results collected so
     far with ``interrupted=True``; saving partials is the caller's decision.
     ``should_stop`` is checked between batches so a job can cancel cooperatively.
+    Set ``retain_results=False`` when a batch callback persists each batch; the
+    outcome then carries counts but no result payloads.
     """
     entries = deps.registry.get_all()
     results: list[AsyncCrawlerFetchResult] = []
+    errors: list[str] = []
+    discovered: list[ScrapableURL] = []
+    registry_urls = {entry.url for entry in entries}
+    succeeded = 0
+    failed = 0
 
     def stop_requested() -> bool:
         return should_stop is not None and should_stop()
-
-    def collector(phase: CrawlPhase) -> Callable[[AsyncCrawlerFetchResult], None]:
-        def collect(result: AsyncCrawlerFetchResult) -> None:
-            results.append(result)
-            if on_progress:
-                on_progress(phase, result)
-
-        return collect
-
-    def batch_collector(
-        phase: CrawlPhase,
-    ) -> Callable[[list[AsyncCrawlerFetchResult]], None]:
-        def collect(batch: list[AsyncCrawlerFetchResult]) -> None:
-            if on_batch:
-                on_batch(phase, batch)
-
-        return collect
 
     if stop_requested():
         return CrawlOutcome(
@@ -80,6 +72,41 @@ async def crawl(
             discovered=0,
             cancelled=True,
         )
+
+    known_for_discovery: set[str] = set()
+    if options.discover_pdfs:
+        async with session_factory() as session:
+            known_for_discovery = await deps.store_factory(session).known_urls()
+
+    def collector(phase: CrawlPhase) -> Callable[[AsyncCrawlerFetchResult], None]:
+        def collect(result: AsyncCrawlerFetchResult) -> None:
+            nonlocal succeeded, failed
+            if result.is_error:
+                failed += 1
+                errors.append(f"{result.url}: {result.error.value if result.error else 'unknown'}")
+            else:
+                succeeded += 1
+            if retain_results:
+                results.append(result)
+            if on_progress:
+                on_progress(phase, result)
+
+        return collect
+
+    def batch_collector(
+        phase: CrawlPhase,
+    ) -> Callable[[list[AsyncCrawlerFetchResult]], Awaitable[None]]:
+        async def collect(batch: list[AsyncCrawlerFetchResult]) -> None:
+            if phase is CrawlPhase.registry and options.discover_pdfs:
+                for pdf in discover_pdf_links(batch, known_for_discovery, registry_urls):
+                    discovered.append(pdf)
+                    known_for_discovery.add(pdf.url)
+            if on_batch:
+                pending = on_batch(phase, batch)
+                if inspect.isawaitable(pending):
+                    await pending
+
+        return collect
 
     interrupted = False
     cancelled = False
@@ -98,11 +125,6 @@ async def crawl(
         cancelled = stop_requested()
 
         if options.discover_pdfs and not cancelled:
-            async with session_factory() as session:
-                known = await deps.store_factory(session).known_urls()
-            registry_urls = {entry.url for entry in entries}
-            discovered = discover_pdf_links(results, known, registry_urls)
-            discovered_count = len(discovered)
             if discovered and not stop_requested():
                 async with deps.crawler_factory() as crawler:
                     await crawler.crawl_all(
@@ -118,14 +140,11 @@ async def crawl(
     except KeyboardInterrupt:
         interrupted = True
 
-    succeeded = sum(1 for result in results if not result.is_error)
-    errors = [
-        f"{result.url}: {result.error.value}" for result in results if result.error is not None
-    ]
+    discovered_count = len(discovered)
     return CrawlOutcome(
         results=results,
         succeeded=succeeded,
-        failed=len(results) - succeeded,
+        failed=failed,
         discovered=discovered_count,
         errors=errors,
         interrupted=interrupted,
@@ -150,7 +169,7 @@ async def save_results(
         if full:
             to_save = records
         else:
-            hashes = await store.hash_map()
+            hashes = await store.hash_map([doc.url for doc in records])
             to_save = [
                 doc
                 for doc in records
@@ -176,28 +195,47 @@ async def scrape(
     should_stop: StopCheck | None = None,
     batch_size: int = 25,
 ) -> ScrapeOutcome:
-    """Crawl and save in one call.
+    """Crawl and persist in batches.
 
-    Interrupted or cancelled crawls are returned without saving; the caller may
-    inspect the partial results and call :func:`save_results` if the user agrees.
+    Each completed batch is saved before the next batch starts, so memory stays
+    bounded by ``batch_size``. A cancelled or interrupted crawl keeps the
+    batches that already committed; the outcome still exposes that it was
+    incomplete. The caller can inspect counts but no longer needs the result
+    payloads.
     """
+    saved = 0
+    skipped = 0
+    persisted_batches = 0
+
+    async def persist_batch(phase: CrawlPhase, batch: list[AsyncCrawlerFetchResult]) -> None:
+        nonlocal saved, skipped, persisted_batches
+        outcome = await save_results(
+            batch,
+            full=options.full,
+            session_factory=session_factory,
+            deps=deps,
+        )
+        saved += outcome.saved
+        skipped += outcome.skipped
+        persisted_batches += 1
+        if on_batch:
+            pending = on_batch(phase, batch)
+            if inspect.isawaitable(pending):
+                await pending
+
     crawl_outcome = await crawl(
         options,
         session_factory=session_factory,
         deps=deps,
         on_progress=on_progress,
-        on_batch=on_batch,
+        on_batch=persist_batch,
         should_stop=should_stop,
         batch_size=batch_size,
+        retain_results=False,
     )
     save_outcome: SaveOutcome | None = None
-    if not crawl_outcome.interrupted and not crawl_outcome.cancelled:
-        save_outcome = await save_results(
-            crawl_outcome.results,
-            full=options.full,
-            session_factory=session_factory,
-            deps=deps,
-        )
+    if persisted_batches or (not crawl_outcome.interrupted and not crawl_outcome.cancelled):
+        save_outcome = SaveOutcome(saved=saved, skipped=skipped)
     return ScrapeOutcome(crawl=crawl_outcome, save=save_outcome)
 
 

@@ -43,6 +43,17 @@ async def test_hash_map_maps_url_to_content_hash(clean_session):
     assert await store.hash_map() == {doc.url: "hash3"}
 
 
+async def test_hash_map_can_be_filtered_to_requested_urls(clean_session):
+    store = DocumentStore(clean_session)
+    a = make_document(url="https://www.ird.gov.lk/hash-a", content_hash="hash-a")
+    b = make_document(url="https://www.ird.gov.lk/hash-b", content_hash="hash-b")
+    await store.save([a, b])
+    await store.commit()
+
+    assert await store.hash_map([a.url]) == {a.url: "hash-a"}
+    assert await store.hash_map([]) == {}
+
+
 async def test_scrape_status_counts_saved_documents(clean_session):
     store = DocumentStore(clean_session)
     await store.save(

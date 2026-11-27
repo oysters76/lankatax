@@ -8,7 +8,7 @@ request shape, outcomes, ports and wiring the service needs.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from enum import Enum
 from typing import Protocol
@@ -45,7 +45,7 @@ class CrawlPhase(Enum):
 
 
 ProgressCallback = Callable[[CrawlPhase, AsyncCrawlerFetchResult], None]
-BatchCallback = Callable[[CrawlPhase, list[AsyncCrawlerFetchResult]], None]
+BatchCallback = Callable[[CrawlPhase, list[AsyncCrawlerFetchResult]], Awaitable[None] | None]
 StopCheck = Callable[[], bool]
 
 
@@ -55,7 +55,7 @@ class Crawler(Protocol):
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
         on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
-        on_batch: Callable[[list[AsyncCrawlerFetchResult]], None] | None = None,
+        on_batch: Callable[[list[AsyncCrawlerFetchResult]], Awaitable[None] | None] | None = None,
         should_stop: StopCheck | None = None,
         batch_size: int = 25,
     ) -> list[AsyncCrawlerFetchResult]: ...
@@ -68,7 +68,7 @@ class UrlRegistry(Protocol):
 class ScrapeStore(Protocol):
     async def known_urls(self) -> set[str]: ...
 
-    async def hash_map(self) -> dict[str, str]: ...
+    async def hash_map(self, urls: list[str] | None = None) -> dict[str, str]: ...
 
     async def save(self, documents: list[Document]) -> None: ...
 

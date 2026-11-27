@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Self
@@ -116,7 +117,9 @@ class _StubCrawler:
                 if on_result:
                     on_result(result)
             if on_batch:
-                on_batch(batch)
+                pending = on_batch(batch)
+                if inspect.isawaitable(pending):
+                    await pending
         return results
 
 
@@ -137,8 +140,10 @@ class _StubStore:
     async def known_urls(self) -> set[str]:
         return set(self._known)
 
-    async def hash_map(self) -> dict[str, str]:
-        return dict(self._hashes)
+    async def hash_map(self, urls: list[str] | None = None) -> dict[str, str]:
+        if urls is None:
+            return dict(self._hashes)
+        return {url: self._hashes[url] for url in urls if url in self._hashes}
 
     async def save(self, documents: list[Document]) -> None:
         self.saved.extend(documents)
@@ -379,6 +384,27 @@ async def test_scrape_saves_when_crawl_completes():
     assert outcome.save.saved == 1
 
 
+async def test_scrape_persists_each_batch_without_retaining_results():
+    entries = [
+        _entry("https://www.ird.gov.lk/a"),
+        _entry("https://www.ird.gov.lk/b"),
+        _entry("https://www.ird.gov.lk/c"),
+    ]
+    store = _StubStore()
+
+    outcome = await scrape(
+        ScrapeOptions(),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(_StubRegistry(entries), _StubCrawler(), store),
+        batch_size=1,
+    )
+
+    assert outcome.save is not None
+    assert outcome.save.saved == 3
+    assert len(store.saved) == 3
+    assert outcome.crawl.results == []
+
+
 async def test_scrape_does_not_save_interrupted_crawl():
     entries = [
         _entry("https://www.ird.gov.lk/a"),
@@ -397,7 +423,7 @@ async def test_scrape_does_not_save_interrupted_crawl():
     assert store.saved == []
 
 
-async def test_scrape_does_not_save_cancelled_crawl():
+async def test_scrape_keeps_completed_batches_when_cancelled():
     entries = [
         _entry("https://www.ird.gov.lk/a"),
         _entry("https://www.ird.gov.lk/b"),
@@ -419,8 +445,10 @@ async def test_scrape_does_not_save_cancelled_crawl():
     )
 
     assert outcome.cancelled is True
-    assert outcome.save is None
-    assert store.saved == []
+    assert outcome.save is not None
+    assert outcome.save.saved == 1
+    assert len(store.saved) == 1
+    assert outcome.crawl.results == []
 
 
 async def test_get_scrape_status_reads_the_store():

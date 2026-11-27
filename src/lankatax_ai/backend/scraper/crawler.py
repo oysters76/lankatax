@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import inspect
 import logging
 import random
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from types import TracebackType
 from typing import ClassVar, Self
@@ -261,7 +262,7 @@ class AsyncCrawler:
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
         on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
-        on_batch: Callable[[list[AsyncCrawlerFetchResult]], None] | None = None,
+        on_batch: Callable[[list[AsyncCrawlerFetchResult]], Awaitable[None] | None] | None = None,
         should_stop: Callable[[], bool] | None = None,
         batch_size: int = 25,
     ) -> list[AsyncCrawlerFetchResult]:
@@ -295,6 +296,8 @@ class AsyncCrawler:
             results.extend(batch_results)
 
             if on_batch:
-                on_batch(batch_results)
+                pending = on_batch(batch_results)
+                if inspect.isawaitable(pending):
+                    await pending
 
         return results
