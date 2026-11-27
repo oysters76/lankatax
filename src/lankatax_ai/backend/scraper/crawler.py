@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 import random
 import re
 from collections.abc import Callable
@@ -16,6 +17,8 @@ from httpx import Timeout
 
 from lankatax_ai.backend.scraper.registry import ScrapableURL
 from lankatax_ai.backend.types import DocumentKind
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncCrawlerErrorKind(Enum):
@@ -263,7 +266,15 @@ class AsyncCrawler:
 
         async def _limited(entry: ScrapableURL) -> AsyncCrawlerFetchResult:
             async with semaphore:
-                result = await self.crawl_url(entry)
+                try:
+                    result = await self.crawl_url(entry)
+                except Exception:
+                    logger.exception("Crawl failed for %s", entry.url)
+                    result = AsyncCrawlerFetchResult(
+                        url=entry.url,
+                        entry=entry,
+                        error=AsyncCrawlerErrorKind.exception,
+                    )
                 if on_result:
                     on_result(result)
                 return result

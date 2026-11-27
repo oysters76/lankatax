@@ -1,8 +1,14 @@
 from pathlib import Path
 
+import httpx
 import pytest
 
-from lankatax_ai.backend.scraper.crawler import AsyncCrawler
+from lankatax_ai.backend.scraper.crawler import (
+    AsyncCrawler,
+    AsyncCrawlerErrorKind,
+    AsyncCrawlerResult,
+)
+from tests.helpers import make_scrapable_url_entry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -61,3 +67,48 @@ def test_fallback_to_body():
     result = crawler.parse_page(html, "https://www.ird.gov.lk")
 
     assert "Some tax content here" in result.text
+
+
+async def test_crawl_all_isolates_parse_failures(monkeypatch):
+    crawler = AsyncCrawler()
+    good_url = "https://www.ird.gov.lk/good"
+    bad_url = "https://www.ird.gov.lk/bad"
+
+    async def fake_fetch(url: str, attempts: int = 3) -> AsyncCrawlerResult:
+        return AsyncCrawlerResult(
+            url=url,
+            status_code=200,
+            response=httpx.Response(
+                200,
+                text="<html><body><p>valid content</p></body></html>",
+                request=httpx.Request("GET", url),
+            ),
+            error=None,
+        )
+
+    original_parse = crawler.parse_page
+
+    def parse(html: str, base_url: str):
+        if base_url == bad_url:
+            raise ValueError("malformed page")
+        return original_parse(html, base_url)
+
+    monkeypatch.setattr(crawler, "fetch", fake_fetch)
+    monkeypatch.setattr(crawler, "parse_page", parse)
+
+    seen: list[str] = []
+    results = await crawler.crawl_all(
+        [
+            make_scrapable_url_entry(url=good_url, label="good"),
+            make_scrapable_url_entry(url=bad_url, label="bad"),
+        ],
+        on_result=lambda result: seen.append(result.url),
+    )
+
+    by_url = {result.url: result for result in results}
+    assert len(results) == 2
+    assert set(seen) == {good_url, bad_url}
+    assert by_url[good_url].parsed_page is not None
+    assert by_url[good_url].error is None
+    assert by_url[bad_url].parsed_page is None
+    assert by_url[bad_url].error is AsyncCrawlerErrorKind.exception
