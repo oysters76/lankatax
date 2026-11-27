@@ -150,7 +150,6 @@ class CorpusState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1, server_default="1")
     epoch: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    last_scrape_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_ingest_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_refresh_run_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")

@@ -1,7 +1,7 @@
 """The ingest use case: chunk, embed and store documents.
 
-Transport-agnostic. The CLI and the API pass a session factory, wired
-collaborators and an optional progress callback; formatting stays in the caller.
+Transport-agnostic. Callers pass a session factory and wired collaborators;
+formatting and progress stay outside the use case.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ async def ingest(
     *,
     session_factory: SessionFactory,
     deps: IngestDeps,
+    run_id: str | None = None,
 ) -> IngestionResult:
     """Ingest the documents selected by ``options``.
 
@@ -59,7 +60,8 @@ async def ingest(
             result.chunks_created += batch.chunks_created
             result.tokens_used += batch.tokens_used
 
-        return result
+    await deps.corpus_finalizer(run_id)
+    return result
 
 
 async def get_ingestion_status(
