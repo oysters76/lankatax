@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.documents import ScrapeStatusRecord
-from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import ScrapableURL
+from lankatax_ai.backend.scraper.types import AsyncCrawlerFetchResult
 
 __all__ = [
     "CrawlBatch",

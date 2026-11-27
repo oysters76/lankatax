@@ -1,7 +1,7 @@
 from urllib.parse import unquote, urlparse
 
-from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import ScrapableURL
+from lankatax_ai.backend.scraper.types import AsyncCrawlerFetchResult
 from lankatax_ai.backend.types import DocumentKind
 
 

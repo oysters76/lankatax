@@ -4,11 +4,11 @@ from lankatax_ai.backend.ingestion.types import (
     ChunkCitationMeta,
     ChunkStrategy,
 )
-from lankatax_ai.backend.scraper.crawler import (
+from lankatax_ai.backend.scraper.registry import ScrapableURL, URLCategory
+from lankatax_ai.backend.scraper.types import (
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.registry import ScrapableURL, URLCategory
 from lankatax_ai.backend.types import DocumentKind
 
 

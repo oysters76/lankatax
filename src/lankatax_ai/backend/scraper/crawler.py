@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
 import random
 import re
 from collections.abc import AsyncIterator, Callable
-from enum import Enum
 from types import TracebackType
 from typing import ClassVar, Self
 from urllib.parse import urljoin
@@ -16,51 +14,15 @@ from bs4 import BeautifulSoup as bs
 from httpx import Timeout
 
 from lankatax_ai.backend.scraper.registry import ScrapableURL
+from lankatax_ai.backend.scraper.types import (
+    AsyncCrawlerErrorKind,
+    AsyncCrawlerFetchResult,
+    AsyncCrawlerParsedPage,
+    AsyncCrawlerResult,
+)
 from lankatax_ai.backend.types import DocumentKind
 
 logger = logging.getLogger(__name__)
-
-
-class AsyncCrawlerErrorKind(Enum):
-    not_found = "not_found"
-    server_error = "server_error"
-    no_permission = "no_permission"
-    exception = "exception"
-    retries_exhausted = "retries_exhausted"
-    unknown_error = "unknown_error"
-
-
-@dataclasses.dataclass
-class AsyncCrawlerParsedPage:
-    title: str
-    text: str
-    raw_html: str
-    pdf_links: list[str]
-
-
-@dataclasses.dataclass
-class AsyncCrawlerResult:
-    url: str
-    status_code: int
-    response: httpx.Response | None
-    error: AsyncCrawlerErrorKind | None
-
-    @property
-    def is_error(self) -> bool:
-        return self.error is not None
-
-
-@dataclasses.dataclass
-class AsyncCrawlerFetchResult:
-    url: str
-    entry: ScrapableURL
-    parsed_page: AsyncCrawlerParsedPage | None = None
-    pdf_bytes: bytes | None = None
-    error: AsyncCrawlerErrorKind | None = None
-
-    @property
-    def is_error(self) -> bool:
-        return self.error is not None
 
 
 class AsyncCrawler:

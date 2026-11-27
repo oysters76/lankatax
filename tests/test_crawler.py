@@ -3,11 +3,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from lankatax_ai.backend.scraper.crawler import (
-    AsyncCrawler,
-    AsyncCrawlerErrorKind,
-    AsyncCrawlerResult,
-)
+from lankatax_ai.backend.scraper.crawler import AsyncCrawler
+from lankatax_ai.backend.scraper.types import AsyncCrawlerErrorKind, AsyncCrawlerResult
 from tests.helpers import make_scrapable_url_entry
 
 FIXTURES = Path(__file__).parent / "fixtures"

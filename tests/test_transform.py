@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 from lankatax_ai.backend.scraper.content_hasher import compute_hash
-from lankatax_ai.backend.scraper.crawler import (
+from lankatax_ai.backend.scraper.transform import to_document
+from lankatax_ai.backend.scraper.types import (
     AsyncCrawlerErrorKind,
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.transform import to_document
 from lankatax_ai.backend.types import DocumentKind
 from tests.helpers import make_scrapable_url_entry as _make_entry
 

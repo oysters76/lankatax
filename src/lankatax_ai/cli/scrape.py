@@ -6,7 +6,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from rich.table import Table
 
 from lankatax_ai.backend.db.session import async_session, dispose_engine
-from lankatax_ai.backend.scraper.crawler import AsyncCrawler, AsyncCrawlerFetchResult
+from lankatax_ai.backend.scraper.crawler import AsyncCrawler
 from lankatax_ai.backend.scraper.pdf_discovery import discover_pdf_links
 from lankatax_ai.backend.scraper.registry import URLRegistry
 from lankatax_ai.backend.scraper.storage import (
@@ -16,6 +16,7 @@ from lankatax_ai.backend.scraper.storage import (
     save_documents,
 )
 from lankatax_ai.backend.scraper.transform import to_document
+from lankatax_ai.backend.scraper.types import AsyncCrawlerFetchResult
 
 
 def scrape(

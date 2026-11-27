@@ -11,12 +11,12 @@ from sqlalchemy import func, select
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.documents import DocumentStore, ScrapeStatusRecord
 from lankatax_ai.backend.scraper.content_hasher import compute_hash
-from lankatax_ai.backend.scraper.crawler import (
+from lankatax_ai.backend.scraper.registry import ScrapableURL, URLRegistry
+from lankatax_ai.backend.scraper.types import (
     AsyncCrawlerErrorKind,
     AsyncCrawlerFetchResult,
     AsyncCrawlerParsedPage,
 )
-from lankatax_ai.backend.scraper.registry import ScrapableURL, URLRegistry
 from lankatax_ai.backend.services.scrape import (
     CrawlPhase,
     ScrapeDeps,

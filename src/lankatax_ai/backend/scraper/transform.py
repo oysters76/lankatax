@@ -1,7 +1,7 @@
 from lankatax_ai.backend.db.models import Document
 from lankatax_ai.backend.scraper.content_hasher import compute_hash
-from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.pdf_extractor import pdf_to_text
+from lankatax_ai.backend.scraper.types import AsyncCrawlerFetchResult
 
 
 def to_document(result: AsyncCrawlerFetchResult) -> Document | None:

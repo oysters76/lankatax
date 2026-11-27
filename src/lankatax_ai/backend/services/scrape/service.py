@@ -9,10 +9,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from lankatax_ai.backend.documents import ScrapeStatusRecord
-from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.pdf_discovery import discover_pdf_links
 from lankatax_ai.backend.scraper.registry import ScrapableURL
 from lankatax_ai.backend.scraper.transform import to_document
+from lankatax_ai.backend.scraper.types import AsyncCrawlerFetchResult
 from lankatax_ai.backend.services.protocols import SessionFactory
 from lankatax_ai.backend.services.scrape.types import (
     CrawlBatch,
