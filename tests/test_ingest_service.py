@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from lankatax_ai.backend.ingestion.pipeline import ingest_batches
 from lankatax_ai.backend.ingestion.store import IngestionStore
 from lankatax_ai.backend.ingestion.types import Chunk, EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.services.errors import ValidationError
@@ -166,7 +167,7 @@ async def test_missing_document_returns_error_without_commit():
     )
 
     assert result.docs_processed == 0
-    assert result.errors == [f"Document {missing} not found"]
+    assert result.errors == [f"{missing}: not found"]
     assert repo.commits == 0
 
 
@@ -188,20 +189,77 @@ async def test_failed_document_rolls_back_and_keeps_going():
     assert repo.rollbacks == 1
 
 
-async def test_progress_callback_reports_each_document():
-    docs = [_doc(url="https://www.ird.gov.lk/a"), _doc(url="https://www.ird.gov.lk/b")]
+async def test_ingest_batches_can_be_stopped_after_one_document():
+    docs = [
+        _doc(url="https://www.ird.gov.lk/a"),
+        _doc(url="https://www.ird.gov.lk/b"),
+        _doc(url="https://www.ird.gov.lk/c"),
+    ]
     repo = _StubRepository(docs)
-    events: list[tuple] = []
 
-    await ingest(
-        IngestOptions(target=IngestTarget.pending),
+    batches = ingest_batches(
+        repo,
+        [doc.id for doc in docs],
+        IngestOptions().config,
+        _StubEmbeddings(),
+        EmbeddingPolicy(),
+    )
+    first = await anext(batches)
+    await batches.aclose()
+
+    assert first.document_id == docs[0].id
+    assert first.error is None
+    assert repo.commits == 1
+    assert len(repo.replaced) == 1
+
+
+async def test_ingest_stops_before_embedding_when_budget_is_exhausted():
+    docs = [_doc(url="https://www.ird.gov.lk/a")]
+    repo = _StubRepository(docs)
+    embeddings = _StubEmbeddings()
+
+    result = await ingest(
+        IngestOptions(target=IngestTarget.pending, max_tokens=1),
         session_factory=lambda: _session_factory(_StubSession()),
-        deps=_deps(repo),
-        on_progress=lambda *event: events.append(event),
+        deps=_deps(repo, embeddings),
     )
 
-    assert len(events) == 2
-    assert all(event[4] is None for event in events)
+    assert result.docs_processed == 0
+    assert result.budget_exhausted is True
+    assert embeddings.calls == []
+    assert repo.replaced == []
+    assert repo.commits == 0
+    assert result.errors == [f"{docs[0].id}: token budget exhausted"]
+
+
+async def test_ingest_respects_max_documents():
+    docs = [
+        _doc(url="https://www.ird.gov.lk/a"),
+        _doc(url="https://www.ird.gov.lk/b"),
+        _doc(url="https://www.ird.gov.lk/c"),
+    ]
+    repo = _StubRepository(docs)
+
+    result = await ingest(
+        IngestOptions(target=IngestTarget.pending, max_documents=2),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(repo),
+    )
+
+    assert result.docs_processed == 2
+    assert repo.commits == 2
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_documents": 0},
+        {"max_tokens": 0},
+    ],
+)
+def test_ingest_options_reject_invalid_budgets(kwargs):
+    with pytest.raises(ValidationError):
+        IngestOptions(**kwargs)
 
 
 async def test_session_is_closed():

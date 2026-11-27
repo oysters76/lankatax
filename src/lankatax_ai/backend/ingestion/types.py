@@ -81,6 +81,19 @@ class IngestionResult:
     chunks_created: int = 0
     errors: list[str] = dataclasses.field(default_factory=list)
     tokens_used: int = 0
+    budget_exhausted: bool = False
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class IngestBatch:
+    """The result of committing, or failing, one document."""
+
+    document_id: UUID
+    title: str
+    chunks_created: int
+    tokens_used: int
+    error: str | None = None
+    budget_exhausted: bool = False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
