@@ -49,6 +49,32 @@ class ChunkConfig:
     strategy: ChunkStrategy = ChunkStrategy.structural
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    max_retries: int = 3
+    backoff_base_seconds: float = 1.0
+    backoff_max_seconds: float = 10.0
+    jitter_ratio: float = 0.2
+
+    def __post_init__(self) -> None:
+        if self.max_retries < 0:
+            raise ValueError("max_retries must not be negative")
+        if self.backoff_base_seconds < 0 or self.backoff_max_seconds < 0:
+            raise ValueError("backoff durations must not be negative")
+        if not 0 <= self.jitter_ratio <= 1:
+            raise ValueError("jitter_ratio must be between 0 and 1")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class EmbeddingPolicy:
+    max_batch_tokens: int = 8000
+    retry: RetryPolicy = dataclasses.field(default_factory=RetryPolicy)
+
+    def __post_init__(self) -> None:
+        if self.max_batch_tokens < 1:
+            raise ValueError("max_batch_tokens must be at least 1")
+
+
 @dataclasses.dataclass(slots=True)
 class IngestionResult:
     docs_processed: int = 0

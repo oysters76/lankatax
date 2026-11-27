@@ -7,6 +7,7 @@ from lankatax_ai.backend.services.ingest.service import get_ingestion_status, in
 from lankatax_ai.backend.services.ingest.types import (
     ChunkConfig,
     DocumentEmbeddings,
+    EmbeddingPolicy,
     IngestDeps,
     IngestionRepository,
     IngestionResult,
@@ -20,6 +21,7 @@ from lankatax_ai.backend.services.ingest.types import (
 __all__ = [
     "ChunkConfig",
     "DocumentEmbeddings",
+    "EmbeddingPolicy",
     "IngestDeps",
     "IngestOptions",
     "IngestTarget",

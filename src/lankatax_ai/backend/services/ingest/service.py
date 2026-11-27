@@ -40,7 +40,9 @@ async def ingest(
             doc = await repo.get_document(document_id)
             if doc is None:
                 return IngestionResult(errors=[f"Document {document_id} not found"])
-            chunk_count, tokens_used = await ingest_one(repo, doc, options.config, deps.embeddings)
+            chunk_count, tokens_used = await ingest_one(
+                repo, doc, options.config, deps.embeddings, deps.embedding_policy
+            )
             await repo.commit()
             return IngestionResult(
                 docs_processed=1,
@@ -53,7 +55,14 @@ async def ingest(
         else:
             doc_ids = await repo.pending_document_ids()
 
-        return await ingest_documents(repo, doc_ids, options.config, deps.embeddings, on_progress)
+        return await ingest_documents(
+            repo,
+            doc_ids,
+            options.config,
+            deps.embeddings,
+            deps.embedding_policy,
+            on_progress,
+        )
 
 
 async def get_ingestion_status(

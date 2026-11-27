@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # Embedding cost (text-embedding-3-small: $0.02 per 1M tokens)
     embedding_cost_per_token: float = 0.02 / 1_000_000
 
+    # Embedding request batching and retry policy.
+    embedding_batch_max_tokens: int = Field(8000, gt=0)
+    embedding_max_retries: int = Field(3, ge=0)
+    embedding_backoff_base_seconds: float = Field(1.0, ge=0)
+    embedding_backoff_max_seconds: float = Field(10.0, ge=0)
+    embedding_jitter_ratio: float = Field(0.2, ge=0, le=1)
+
     # Default chunking strategy (structural, semantic, recursive)
     chunk_strategy: str = "structural"
 

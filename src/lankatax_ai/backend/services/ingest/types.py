@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lankatax_ai.backend.ingestion.types import (
     ChunkConfig,
     DocumentEmbeddings,
+    EmbeddingPolicy,
     IngestionRepository,
     IngestionResult,
     IngestionStatus,
@@ -27,6 +28,7 @@ from lankatax_ai.backend.services.errors import ValidationError
 __all__ = [
     "ChunkConfig",
     "DocumentEmbeddings",
+    "EmbeddingPolicy",
     "IngestDeps",
     "IngestOptions",
     "IngestTarget",
@@ -68,3 +70,4 @@ class IngestDeps:
 
     repository_factory: RepositoryFactory
     embeddings: DocumentEmbeddings
+    embedding_policy: EmbeddingPolicy

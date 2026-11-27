@@ -9,9 +9,11 @@ from lankatax_ai.backend.ingestion.pipeline import (
     ingest_document,
     ingest_pending,
 )
-from lankatax_ai.backend.ingestion.types import ChunkConfig, ChunkStrategy
+from lankatax_ai.backend.ingestion.types import ChunkConfig, ChunkStrategy, EmbeddingPolicy
 from lankatax_ai.backend.scraper.storage import get_document_by_id, save_documents
 from tests.helpers import make_document
+
+POLICY = EmbeddingPolicy()
 
 
 def _make_mock_model():
@@ -41,7 +43,7 @@ async def test_ingest_document(clean_session):
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
 
-    chunk_count, _tokens = await ingest_document(clean_session, doc, config, model)
+    chunk_count, _tokens = await ingest_document(clean_session, doc, config, model, POLICY)
 
     assert chunk_count > 0
     cnt = (
@@ -65,13 +67,13 @@ async def test_ingest_document_replaces_old_chunks(clean_session):
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
 
-    await ingest_document(clean_session, doc, config, model)
+    await ingest_document(clean_session, doc, config, model, POLICY)
 
     doc = await get_document_by_id(clean_session, doc_id)
     doc.raw_text = "Updated content about income tax rates and PAYE deductions."
     doc.raw_html = "<p>Updated content about income tax rates and PAYE deductions.</p>"
     doc.content_hash = "updated_hash"
-    second_count, _tokens = await ingest_document(clean_session, doc, config, model)
+    second_count, _tokens = await ingest_document(clean_session, doc, config, model, POLICY)
 
     cnt = (
         await clean_session.execute(
@@ -101,7 +103,7 @@ async def test_ingest_pending_skips_ingested(clean_session):
 
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
-    result = await ingest_pending(clean_session, config, model)
+    result = await ingest_pending(clean_session, config, model, POLICY)
 
     assert result.docs_processed == 1
     assert result.chunks_created > 0
@@ -111,7 +113,7 @@ async def test_ingest_pending_skips_ingested(clean_session):
 async def test_ingest_pending_empty(clean_session):
     model = _make_mock_model()
     config = ChunkConfig(strategy=ChunkStrategy.structural)
-    result = await ingest_pending(clean_session, config, model)
+    result = await ingest_pending(clean_session, config, model, POLICY)
 
     assert result.docs_processed == 0
     assert result.chunks_created == 0

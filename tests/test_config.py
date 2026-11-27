@@ -230,3 +230,53 @@ def test_unknown_hatchet_tls_strategy_fails_at_startup(monkeypatch):
 
     with pytest.raises(ValidationError):
         _load()
+
+
+def test_embedding_policy_defaults(monkeypatch):
+    for name in (
+        "EMBEDDING_BATCH_MAX_TOKENS",
+        "EMBEDDING_MAX_RETRIES",
+        "EMBEDDING_BACKOFF_BASE_SECONDS",
+        "EMBEDDING_BACKOFF_MAX_SECONDS",
+        "EMBEDDING_JITTER_RATIO",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = _load()
+
+    assert settings.embedding_batch_max_tokens == 8000
+    assert settings.embedding_max_retries == 3
+    assert settings.embedding_backoff_base_seconds == 1.0
+    assert settings.embedding_backoff_max_seconds == 10.0
+    assert settings.embedding_jitter_ratio == 0.2
+
+
+def test_embedding_policy_is_read_from_env(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_BATCH_MAX_TOKENS", "4000")
+    monkeypatch.setenv("EMBEDDING_MAX_RETRIES", "5")
+    monkeypatch.setenv("EMBEDDING_BACKOFF_BASE_SECONDS", "0.5")
+    monkeypatch.setenv("EMBEDDING_BACKOFF_MAX_SECONDS", "30")
+    monkeypatch.setenv("EMBEDDING_JITTER_RATIO", "0.1")
+
+    settings = _load()
+
+    assert settings.embedding_batch_max_tokens == 4000
+    assert settings.embedding_max_retries == 5
+    assert settings.embedding_backoff_base_seconds == 0.5
+    assert settings.embedding_backoff_max_seconds == 30
+    assert settings.embedding_jitter_ratio == 0.1
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("EMBEDDING_BATCH_MAX_TOKENS", "0"),
+        ("EMBEDDING_MAX_RETRIES", "-1"),
+        ("EMBEDDING_JITTER_RATIO", "1.1"),
+    ],
+)
+def test_embedding_policy_rejects_invalid_settings(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValidationError):
+        _load()

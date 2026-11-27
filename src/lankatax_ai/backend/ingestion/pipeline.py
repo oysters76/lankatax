@@ -17,6 +17,7 @@ from lankatax_ai.backend.ingestion.store import IngestionStore
 from lankatax_ai.backend.ingestion.types import (
     ChunkConfig,
     DocumentEmbeddings,
+    EmbeddingPolicy,
     IngestionRepository,
     IngestionResult,
     IngestionStatus,
@@ -34,11 +35,12 @@ async def ingest_one(
     doc: Document,
     config: ChunkConfig,
     embeddings: DocumentEmbeddings,
+    policy: EmbeddingPolicy,
 ) -> tuple[int, int]:
     """Chunk, embed and persist one document. Returns (chunk count, tokens)."""
     logger.info("Ingesting doc %s — %s", doc.id, doc.title or doc.url)
     chunks = await chunk_document(doc, config, embeddings)
-    embedded = await embed_chunks(embeddings, chunks)
+    embedded = await embed_chunks(embeddings, chunks, policy=policy)
     tokens_used = sum(c.token_count for c in chunks)
     deleted = await repo.replace_chunks(doc.id, embedded)
     logger.debug("Deleted %d old chunks for doc %s", deleted, doc.id)
@@ -52,6 +54,7 @@ async def ingest_documents(
     doc_ids: list[UUID],
     config: ChunkConfig,
     embeddings: DocumentEmbeddings,
+    policy: EmbeddingPolicy,
     on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     """Ingest each document, committing per document and isolating failures."""
@@ -66,7 +69,7 @@ async def ingest_documents(
                 if on_progress:
                     on_progress(doc_id, 0, str(doc_id), 0, "not found")
                 continue
-            chunk_count, tokens_used = await ingest_one(repo, doc, config, embeddings)
+            chunk_count, tokens_used = await ingest_one(repo, doc, config, embeddings, policy)
             doc_title = doc.title or doc.url
             await repo.commit()
             result.docs_processed += 1
@@ -94,33 +97,36 @@ async def ingest_document(
     doc: Document,
     config: ChunkConfig,
     model: DocumentEmbeddings,
+    policy: EmbeddingPolicy,
 ) -> tuple[int, int]:
     """Ingest one already-loaded document. The caller owns the commit."""
-    return await ingest_one(IngestionStore(session), doc, config, model)
+    return await ingest_one(IngestionStore(session), doc, config, model, policy)
 
 
 async def ingest_pending(
     session: AsyncSession,
     config: ChunkConfig,
     model: DocumentEmbeddings,
+    policy: EmbeddingPolicy,
     on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     repo = IngestionStore(session)
     doc_ids = await repo.pending_document_ids()
     logger.info("Found %d pending documents", len(doc_ids))
-    return await ingest_documents(repo, doc_ids, config, model, on_progress)
+    return await ingest_documents(repo, doc_ids, config, model, policy, on_progress)
 
 
 async def ingest_all(
     session: AsyncSession,
     config: ChunkConfig,
     model: DocumentEmbeddings,
+    policy: EmbeddingPolicy,
     on_progress: ProgressCallback | None = None,
 ) -> IngestionResult:
     repo = IngestionStore(session)
     doc_ids = await repo.all_document_ids()
     logger.info("Found %d total documents", len(doc_ids))
-    return await ingest_documents(repo, doc_ids, config, model, on_progress)
+    return await ingest_documents(repo, doc_ids, config, model, policy, on_progress)
 
 
 async def get_ingestion_status(session: AsyncSession) -> IngestionStatus:

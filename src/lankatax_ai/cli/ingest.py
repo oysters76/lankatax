@@ -16,6 +16,7 @@ from lankatax_ai.backend.ingestion.pipeline import (
     ingest_document,
     ingest_pending,
 )
+from lankatax_ai.backend.ingestion.policy import build_embedding_policy
 from lankatax_ai.backend.ingestion.types import ChunkConfig, ChunkStrategy
 from lankatax_ai.backend.scraper.storage import get_document_by_id
 
@@ -83,34 +84,37 @@ async def _do_ingest_async(all_docs: bool, document_id: str | None, strategy: st
         api_key=settings.openai_api_key.get_secret_value(),
     )
     config = ChunkConfig(strategy=ChunkStrategy(strategy))
+    policy = build_embedding_policy()
     async with async_session() as session:
         if document_id:
-            result = await _ingest_single(session, UUID(document_id), config, model, console)
+            result = await _ingest_single(
+                session, UUID(document_id), config, model, policy, console
+            )
         elif all_docs:
             result = await _ingest_batch(
-                session, config, model, console, mode="all", verbose=verbose
+                session, config, model, policy, console, mode="all", verbose=verbose
             )
         else:
             result = await _ingest_batch(
-                session, config, model, console, mode="pending", verbose=verbose
+                session, config, model, policy, console, mode="pending", verbose=verbose
             )
     _print_summary(console, result)
     await dispose_engine()
 
 
-async def _ingest_single(session, doc_id, config, model, console):
+async def _ingest_single(session, doc_id, config, model, policy, console):
     doc = await get_document_by_id(session, doc_id)
     if doc is None:
         console.print(f"[red]Document {doc_id} not found.[/red]")
         return IngestionResult(errors=[f"Document {doc_id} not found"])
 
     console.print(f"Ingesting [cyan]{doc.title}[/cyan]...")
-    chunk_count, tokens_used = await ingest_document(session, doc, config, model)
+    chunk_count, tokens_used = await ingest_document(session, doc, config, model, policy)
     await session.commit()
     return IngestionResult(docs_processed=1, chunks_created=chunk_count, tokens_used=tokens_used)
 
 
-async def _ingest_batch(session, config, model, console, mode, verbose=False):
+async def _ingest_batch(session, config, model, policy, console, mode, verbose=False):
     fn = ingest_all if mode == "all" else ingest_pending
     label = "all documents" if mode == "all" else "pending documents"
 
@@ -134,7 +138,7 @@ async def _ingest_batch(session, config, model, console, mode, verbose=False):
                 )
             progress.advance(task)
 
-        result = await fn(session, config, model, on_progress=on_progress)
+        result = await fn(session, config, model, policy, on_progress=on_progress)
 
     return result
 

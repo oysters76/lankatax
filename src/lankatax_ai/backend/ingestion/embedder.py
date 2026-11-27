@@ -1,21 +1,71 @@
 import dataclasses
+import functools
 import logging
 import time
 
-from lankatax_ai.backend.ingestion.types import Chunk, DocumentEmbeddings
+from lankatax_ai.backend.ingestion.retry import retry_async
+from lankatax_ai.backend.ingestion.types import Chunk, DocumentEmbeddings, EmbeddingPolicy
 
 logger = logging.getLogger(__name__)
 
 
-async def embed_chunks(model: DocumentEmbeddings, chunks: list[Chunk]) -> list[Chunk]:
-    logger.debug("Embedding %d chunks", len(chunks))
-    texts: list[str] = [c.content for c in chunks]
-    t0 = time.perf_counter()
-    vecs: list[list[float]] = await model.aembed_documents(texts)
-    elapsed = time.perf_counter() - t0
-    logger.info("Embedded %d chunks in %.2fs", len(chunks), elapsed)
+def _batches(chunks: list[Chunk], max_batch_tokens: int) -> list[list[Chunk]]:
+    if max_batch_tokens < 1:
+        raise ValueError("max_batch_tokens must be at least 1")
+
+    batches: list[list[Chunk]] = []
+    current: list[Chunk] = []
+    current_tokens = 0
+
+    for chunk in chunks:
+        tokens = max(1, chunk.token_count)
+        if current and current_tokens + tokens > max_batch_tokens:
+            batches.append(current)
+            current = []
+            current_tokens = 0
+        current.append(chunk)
+        current_tokens += tokens
+
+    if current:
+        batches.append(current)
+    return batches
+
+
+async def embed_chunks(
+    model: DocumentEmbeddings,
+    chunks: list[Chunk],
+    *,
+    policy: EmbeddingPolicy,
+) -> list[Chunk]:
+    """Embed chunks in token-bounded batches, retrying transient failures."""
+    if not chunks:
+        return []
+
+    batches = _batches(chunks, policy.max_batch_tokens)
     results: list[Chunk] = []
-    for chunk, vec in zip(chunks, vecs):
-        c_cloned = dataclasses.replace(chunk, embedding=vec)
-        results.append(c_cloned)
+
+    for index, batch in enumerate(batches, start=1):
+        texts = [chunk.content for chunk in batch]
+        started = time.perf_counter()
+        vectors = await retry_async(
+            functools.partial(model.aembed_documents, texts),
+            policy=policy.retry,
+        )
+        if len(vectors) != len(batch):
+            raise RuntimeError(
+                f"Embedding provider returned {len(vectors)} vectors for {len(batch)} chunks"
+            )
+
+        results.extend(
+            dataclasses.replace(chunk, embedding=vector)
+            for chunk, vector in zip(batch, vectors, strict=True)
+        )
+        logger.info(
+            "Embedded batch %d/%d (%d chunks) in %.2fs",
+            index,
+            len(batches),
+            len(batch),
+            time.perf_counter() - started,
+        )
+
     return results

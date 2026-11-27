@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from lankatax_ai.backend.ingestion.store import IngestionStore
-from lankatax_ai.backend.ingestion.types import Chunk, IngestionStatus
+from lankatax_ai.backend.ingestion.types import Chunk, EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.services.errors import ValidationError
 from lankatax_ai.backend.services.ingest import (
     IngestDeps,
@@ -100,6 +100,7 @@ def _deps(repo: _StubRepository, embeddings: _StubEmbeddings | None = None) -> I
     return IngestDeps(
         repository_factory=lambda _session: repo,
         embeddings=embeddings or _StubEmbeddings(),
+        embedding_policy=EmbeddingPolicy(),
     )
 
 
