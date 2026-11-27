@@ -9,10 +9,10 @@ authors = [
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "alembic>=1.15",
-    "apscheduler>=3.11.3",
     "asyncpg>=0.32.0",
     "beautifulsoup4>=4.15.0",
     "fastapi>=0.162.2",
+    "hatchet-sdk>=1.46.0,<2",
     "httpx>=0.28.1",
     "langchain>=1.4.9",
     "langchain-core>=1.7.6",
