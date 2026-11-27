@@ -8,10 +8,7 @@ import pytest
 from lankatax_ai.backend.cache import PgResultCache
 from lankatax_ai.backend.db.models import CorpusState
 from lankatax_ai.backend.rag.types import RetrievalResult
-from lankatax_ai.backend.services.corpus import (
-    advance_corpus_epoch,
-    advance_corpus_epoch_after_ingest,
-)
+from lankatax_ai.backend.services.corpus import finalize_ingest
 
 pytestmark = pytest.mark.db
 
@@ -38,10 +35,10 @@ def _factory(session):
     return factory
 
 
-async def test_advance_corpus_epoch_updates_state(clean_session):
-    epoch = await advance_corpus_epoch(
+async def test_finalize_ingest_updates_state(clean_session):
+    epoch = await finalize_ingest(
         session_factory=_factory(clean_session),
-        last_refresh_run_id="run-1",
+        run_id="run-1",
     )
 
     assert epoch == 1
@@ -53,26 +50,11 @@ async def test_advance_corpus_epoch_updates_state(clean_session):
     assert state.last_ingest_at is not None
 
 
-async def test_advance_after_ingest_is_a_noop_without_documents(clean_session):
-    epoch = await advance_corpus_epoch_after_ingest(
-        session_factory=_factory(clean_session),
-        docs_processed=0,
-    )
+async def test_finalize_ingest_advances_every_run(clean_session):
+    await finalize_ingest(session_factory=_factory(clean_session))
+    epoch = await finalize_ingest(session_factory=_factory(clean_session))
 
-    assert epoch is None
-    state = await clean_session.get(CorpusState, 1)
-    assert state is not None
-    assert state.epoch == 0
-
-
-async def test_advance_after_ingest_bumps_with_documents(clean_session):
-    epoch = await advance_corpus_epoch_after_ingest(
-        session_factory=_factory(clean_session),
-        docs_processed=2,
-        last_refresh_run_id="run-2",
-    )
-
-    assert epoch == 1
+    assert epoch == 2
 
 
 async def test_epoch_bump_hides_previous_cache_entries(clean_session):
@@ -82,6 +64,6 @@ async def test_epoch_bump_hides_previous_cache_entries(clean_session):
 
     assert await cache.get("paye", EMBEDDING) is not None
 
-    await advance_corpus_epoch(session_factory=_factory(clean_session))
+    await finalize_ingest(session_factory=_factory(clean_session))
 
     assert await cache.get("paye", EMBEDDING) is None
