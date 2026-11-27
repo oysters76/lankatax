@@ -53,12 +53,18 @@ class IngestOptions:
     config: ChunkConfig = dataclasses.field(default_factory=ChunkConfig)
     target: IngestTarget = IngestTarget.pending
     document_id: UUID | None = None
+    max_documents: int | None = None
+    max_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if self.target is IngestTarget.document and self.document_id is None:
             raise ValidationError("document_id is required when target is 'document'")
         if self.target is not IngestTarget.document and self.document_id is not None:
             raise ValidationError("document_id is only valid when target is 'document'")
+        if self.max_documents is not None and self.max_documents < 1:
+            raise ValidationError("max_documents must be at least 1")
+        if self.max_tokens is not None and self.max_tokens < 1:
+            raise ValidationError("max_tokens must be at least 1")
 
 
 RepositoryFactory = Callable[[AsyncSession], IngestionRepository]
