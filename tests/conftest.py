@@ -71,6 +71,10 @@ async def session(async_engine):
 
 async def _truncate(session: AsyncSession) -> None:
     await session.execute(text(f"TRUNCATE TABLE {', '.join(_TABLES)} CASCADE"))
+    # The application assumes this singleton row exists; truncation removes it.
+    await session.execute(
+        text("INSERT INTO corpus_state (id, epoch) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
+    )
 
 
 @pytest_asyncio.fixture(loop_scope="session")

@@ -137,23 +137,23 @@ class ChatMessage(Base):
     session: Mapped[ChatSession] = relationship(back_populates="messages")
 
 
-class ScrapeRun(Base):
-    __tablename__ = "scrape_runs"
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('running', 'completed', 'failed')", name="ck_scrape_runs_status"
-        ),
-    )
+class CorpusState(Base):
+    """Singleton row that versions the searchable corpus.
 
-    id: Mapped[UUID] = mapped_column(
-        primary_key=True, default=uuid4, server_default=text("gen_random_uuid()")
-    )
-    started_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")
-    finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    pages_scraped: Mapped[int] = mapped_column(Integer, server_default="0")
-    pages_updated: Mapped[int] = mapped_column(Integer, server_default="0")
-    pages_failed: Mapped[int] = mapped_column(Integer, server_default="0")
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="running")
+    A successful ingest advances ``epoch``. Cache reads are scoped to the
+    current epoch, so readers stop seeing results produced by an older corpus
+    without requiring a destructive cache flush.
+    """
+
+    __tablename__ = "corpus_state"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_corpus_state_singleton"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1, server_default="1")
+    epoch: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_scrape_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_ingest_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_refresh_run_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")
 
 
 class EvalResult(Base):
@@ -184,6 +184,7 @@ class CacheEntry(Base):
             postgresql_with={"m": 16, "ef_construction": 64},
             postgresql_ops={"query_embedding": "vector_cosine_ops"},
         ),
+        Index("idx_cache_entries_epoch_created", "corpus_epoch", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -192,6 +193,7 @@ class CacheEntry(Base):
     query_embedding = mapped_column(Vector(1536))
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str] = mapped_column(Text, nullable=False)
+    corpus_epoch: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default="now()")
     hit_count: Mapped[int] = mapped_column(Integer, server_default="0")
 
