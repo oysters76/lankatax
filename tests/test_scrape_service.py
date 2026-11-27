@@ -97,16 +97,26 @@ class _StubCrawler:
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
         on_result=None,
+        on_batch=None,
+        should_stop=None,
+        batch_size: int = 25,
     ) -> list[AsyncCrawlerFetchResult]:
         self.calls.append([entry.url for entry in entries])
         results: list[AsyncCrawlerFetchResult] = []
-        for index, entry in enumerate(entries):
-            if self._interrupt_after is not None and index >= self._interrupt_after:
-                raise KeyboardInterrupt
-            result = self._result(entry)
-            results.append(result)
-            if on_result:
-                on_result(result)
+        for start in range(0, len(entries), batch_size):
+            if should_stop is not None and should_stop():
+                break
+            batch: list[AsyncCrawlerFetchResult] = []
+            for index in range(start, min(start + batch_size, len(entries))):
+                if self._interrupt_after is not None and index >= self._interrupt_after:
+                    raise KeyboardInterrupt
+                result = self._result(entries[index])
+                results.append(result)
+                batch.append(result)
+                if on_result:
+                    on_result(result)
+            if on_batch:
+                on_batch(batch)
         return results
 
 
@@ -159,12 +169,18 @@ async def _run_crawl(
     *,
     options: ScrapeOptions | None = None,
     on_progress=None,
+    on_batch=None,
+    should_stop=None,
+    batch_size: int = 25,
 ):
     return await crawl(
         options or ScrapeOptions(),
         session_factory=lambda: _session_factory(_StubSession()),
         deps=_deps(registry, crawler, store),
         on_progress=on_progress,
+        on_batch=on_batch,
+        should_stop=should_stop,
+        batch_size=batch_size,
     )
 
 
@@ -199,6 +215,45 @@ async def test_crawl_emits_phase_tagged_progress():
     )
 
     assert events == [(CrawlPhase.registry, "https://www.ird.gov.lk/a")]
+
+
+async def test_crawl_reports_batches_and_stops_when_requested():
+    entries = [
+        _entry("https://www.ird.gov.lk/a"),
+        _entry("https://www.ird.gov.lk/b"),
+        _entry("https://www.ird.gov.lk/c"),
+        _entry("https://www.ird.gov.lk/d"),
+    ]
+    crawler = _StubCrawler()
+    batches: list[tuple[CrawlPhase, list[str]]] = []
+    state = {"stop": False}
+
+    def on_batch(phase, batch):
+        batches.append((phase, [result.url for result in batch]))
+        if len(batches) == 1:
+            state["stop"] = True
+
+    outcome = await _run_crawl(
+        _StubRegistry(entries),
+        crawler,
+        _StubStore(),
+        on_batch=on_batch,
+        should_stop=lambda: state["stop"],
+        batch_size=2,
+    )
+
+    assert outcome.cancelled is True
+    assert [result.url for result in outcome.results] == [
+        "https://www.ird.gov.lk/a",
+        "https://www.ird.gov.lk/b",
+    ]
+    assert batches == [
+        (
+            CrawlPhase.registry,
+            ["https://www.ird.gov.lk/a", "https://www.ird.gov.lk/b"],
+        )
+    ]
+    assert crawler.calls == [[entry.url for entry in entries]]
 
 
 async def test_crawl_discovers_and_crawls_new_pdfs():
@@ -338,6 +393,32 @@ async def test_scrape_does_not_save_interrupted_crawl():
     )
 
     assert outcome.interrupted is True
+    assert outcome.save is None
+    assert store.saved == []
+
+
+async def test_scrape_does_not_save_cancelled_crawl():
+    entries = [
+        _entry("https://www.ird.gov.lk/a"),
+        _entry("https://www.ird.gov.lk/b"),
+        _entry("https://www.ird.gov.lk/c"),
+    ]
+    store = _StubStore()
+    state = {"stop": False}
+
+    def on_batch(_phase, _batch):
+        state["stop"] = True
+
+    outcome = await scrape(
+        ScrapeOptions(),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(_StubRegistry(entries), _StubCrawler(), store),
+        on_batch=on_batch,
+        should_stop=lambda: state["stop"],
+        batch_size=1,
+    )
+
+    assert outcome.cancelled is True
     assert outcome.save is None
     assert store.saved == []
 

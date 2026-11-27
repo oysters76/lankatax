@@ -21,6 +21,7 @@ from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import ScrapableURL
 
 __all__ = [
+    "BatchCallback",
     "CrawlOutcome",
     "CrawlPhase",
     "Crawler",
@@ -32,6 +33,7 @@ __all__ = [
     "ScrapeOutcome",
     "ScrapeStatusRecord",
     "ScrapeStore",
+    "StopCheck",
     "StoreFactory",
     "UrlRegistry",
 ]
@@ -43,6 +45,8 @@ class CrawlPhase(Enum):
 
 
 ProgressCallback = Callable[[CrawlPhase, AsyncCrawlerFetchResult], None]
+BatchCallback = Callable[[CrawlPhase, list[AsyncCrawlerFetchResult]], None]
+StopCheck = Callable[[], bool]
 
 
 class Crawler(Protocol):
@@ -51,6 +55,9 @@ class Crawler(Protocol):
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
         on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
+        on_batch: Callable[[list[AsyncCrawlerFetchResult]], None] | None = None,
+        should_stop: StopCheck | None = None,
+        batch_size: int = 25,
     ) -> list[AsyncCrawlerFetchResult]: ...
 
 
@@ -90,6 +97,7 @@ class CrawlOutcome:
     discovered: int
     errors: list[str] = dataclasses.field(default_factory=list)
     interrupted: bool = False
+    cancelled: bool = False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -106,6 +114,10 @@ class ScrapeOutcome:
     @property
     def interrupted(self) -> bool:
         return self.crawl.interrupted
+
+    @property
+    def cancelled(self) -> bool:
+        return self.crawl.cancelled
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

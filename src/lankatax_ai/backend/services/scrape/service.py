@@ -16,6 +16,7 @@ from lankatax_ai.backend.scraper.registry import ScrapableURL
 from lankatax_ai.backend.scraper.transform import to_document
 from lankatax_ai.backend.services.protocols import SessionFactory
 from lankatax_ai.backend.services.scrape.types import (
+    BatchCallback,
     CrawlOutcome,
     CrawlPhase,
     ProgressCallback,
@@ -23,6 +24,7 @@ from lankatax_ai.backend.services.scrape.types import (
     ScrapeDeps,
     ScrapeOptions,
     ScrapeOutcome,
+    StopCheck,
 )
 
 
@@ -37,14 +39,21 @@ async def crawl(
     session_factory: SessionFactory,
     deps: ScrapeDeps,
     on_progress: ProgressCallback | None = None,
+    on_batch: BatchCallback | None = None,
+    should_stop: StopCheck | None = None,
+    batch_size: int = 25,
 ) -> CrawlOutcome:
     """Crawl the registry and, unless disabled, newly discovered PDFs.
 
     A ``KeyboardInterrupt`` stops the crawl and returns the results collected so
     far with ``interrupted=True``; saving partials is the caller's decision.
+    ``should_stop`` is checked between batches so a job can cancel cooperatively.
     """
     entries = deps.registry.get_all()
     results: list[AsyncCrawlerFetchResult] = []
+
+    def stop_requested() -> bool:
+        return should_stop is not None and should_stop()
 
     def collector(phase: CrawlPhase) -> Callable[[AsyncCrawlerFetchResult], None]:
         def collect(result: AsyncCrawlerFetchResult) -> None:
@@ -54,22 +63,58 @@ async def crawl(
 
         return collect
 
+    def batch_collector(
+        phase: CrawlPhase,
+    ) -> Callable[[list[AsyncCrawlerFetchResult]], None]:
+        def collect(batch: list[AsyncCrawlerFetchResult]) -> None:
+            if on_batch:
+                on_batch(phase, batch)
+
+        return collect
+
+    if stop_requested():
+        return CrawlOutcome(
+            results=[],
+            succeeded=0,
+            failed=0,
+            discovered=0,
+            cancelled=True,
+        )
+
     interrupted = False
+    cancelled = False
     discovered_count = 0
 
     try:
         async with deps.crawler_factory() as crawler:
-            await crawler.crawl_all(entries, on_result=collector(CrawlPhase.registry))
+            await crawler.crawl_all(
+                entries,
+                on_result=collector(CrawlPhase.registry),
+                on_batch=batch_collector(CrawlPhase.registry),
+                should_stop=should_stop,
+                batch_size=batch_size,
+            )
 
-        if options.discover_pdfs:
+        cancelled = stop_requested()
+
+        if options.discover_pdfs and not cancelled:
             async with session_factory() as session:
                 known = await deps.store_factory(session).known_urls()
             registry_urls = {entry.url for entry in entries}
             discovered = discover_pdf_links(results, known, registry_urls)
             discovered_count = len(discovered)
-            if discovered:
+            if discovered and not stop_requested():
                 async with deps.crawler_factory() as crawler:
-                    await crawler.crawl_all(discovered, on_result=collector(CrawlPhase.discovered))
+                    await crawler.crawl_all(
+                        discovered,
+                        on_result=collector(CrawlPhase.discovered),
+                        on_batch=batch_collector(CrawlPhase.discovered),
+                        should_stop=should_stop,
+                        batch_size=batch_size,
+                    )
+                cancelled = stop_requested()
+            elif discovered:
+                cancelled = True
     except KeyboardInterrupt:
         interrupted = True
 
@@ -84,6 +129,7 @@ async def crawl(
         discovered=discovered_count,
         errors=errors,
         interrupted=interrupted,
+        cancelled=cancelled,
     )
 
 
@@ -126,20 +172,26 @@ async def scrape(
     session_factory: SessionFactory,
     deps: ScrapeDeps,
     on_progress: ProgressCallback | None = None,
+    on_batch: BatchCallback | None = None,
+    should_stop: StopCheck | None = None,
+    batch_size: int = 25,
 ) -> ScrapeOutcome:
     """Crawl and save in one call.
 
-    Interrupted crawls are returned without saving; the caller may inspect the
-    partial results and call :func:`save_results` if the user agrees.
+    Interrupted or cancelled crawls are returned without saving; the caller may
+    inspect the partial results and call :func:`save_results` if the user agrees.
     """
     crawl_outcome = await crawl(
         options,
         session_factory=session_factory,
         deps=deps,
         on_progress=on_progress,
+        on_batch=on_batch,
+        should_stop=should_stop,
+        batch_size=batch_size,
     )
     save_outcome: SaveOutcome | None = None
-    if not crawl_outcome.interrupted:
+    if not crawl_outcome.interrupted and not crawl_outcome.cancelled:
         save_outcome = await save_results(
             crawl_outcome.results,
             full=options.full,

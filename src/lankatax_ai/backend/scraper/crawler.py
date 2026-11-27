@@ -261,7 +261,13 @@ class AsyncCrawler:
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
         on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
+        on_batch: Callable[[list[AsyncCrawlerFetchResult]], None] | None = None,
+        should_stop: Callable[[], bool] | None = None,
+        batch_size: int = 25,
     ) -> list[AsyncCrawlerFetchResult]:
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
+
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def _limited(entry: ScrapableURL) -> AsyncCrawlerFetchResult:
@@ -279,4 +285,16 @@ class AsyncCrawler:
                     on_result(result)
                 return result
 
-        return await asyncio.gather(*[_limited(e) for e in entries])
+        results: list[AsyncCrawlerFetchResult] = []
+        for start in range(0, len(entries), batch_size):
+            if should_stop is not None and should_stop():
+                break
+
+            batch = entries[start : start + batch_size]
+            batch_results = await asyncio.gather(*[_limited(e) for e in batch])
+            results.extend(batch_results)
+
+            if on_batch:
+                on_batch(batch_results)
+
+        return results
