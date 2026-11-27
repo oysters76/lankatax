@@ -69,14 +69,16 @@ def test_fallback_to_body():
     assert "Some tax content here" in result.text
 
 
-async def test_crawl_all_stops_between_batches(monkeypatch):
+async def test_crawl_batches_stop_when_the_consumer_closes(monkeypatch):
     crawler = AsyncCrawler()
     entries = [
         make_scrapable_url_entry(url=f"https://www.ird.gov.lk/{index}", label=str(index))
         for index in range(4)
     ]
+    fetched: list[str] = []
 
     async def fake_fetch(url: str, attempts: int = 3) -> AsyncCrawlerResult:
+        fetched.append(url)
         return AsyncCrawlerResult(
             url=url,
             status_code=200,
@@ -89,25 +91,19 @@ async def test_crawl_all_stops_between_batches(monkeypatch):
         )
 
     monkeypatch.setattr(crawler, "fetch", fake_fetch)
-    state = {"stop": False}
-    batches: list[list[str]] = []
 
-    def on_batch(batch):
-        batches.append([result.url for result in batch])
-        state["stop"] = True
+    batches = crawler.crawl_batches(entries, batch_size=2)
+    first = await anext(batches)
+    await batches.aclose()
 
-    results = await crawler.crawl_all(
-        entries,
-        batch_size=2,
-        on_batch=on_batch,
-        should_stop=lambda: state["stop"],
-    )
-
-    assert [result.url for result in results] == [
+    assert [result.url for result in first] == [
         "https://www.ird.gov.lk/0",
         "https://www.ird.gov.lk/1",
     ]
-    assert batches == [["https://www.ird.gov.lk/0", "https://www.ird.gov.lk/1"]]
+    assert fetched == [
+        "https://www.ird.gov.lk/0",
+        "https://www.ird.gov.lk/1",
+    ]
 
 
 async def test_crawl_all_isolates_parse_failures(monkeypatch):

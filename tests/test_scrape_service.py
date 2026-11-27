@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import inspect
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Self
@@ -23,10 +23,12 @@ from lankatax_ai.backend.services.scrape import (
     ScrapeOptions,
     build_scrape_deps,
     crawl,
+    crawl_batches,
     get_scrape_status,
     list_urls,
     save_results,
     scrape,
+    scrape_batches,
 )
 from lankatax_ai.backend.types import DocumentKind
 from tests.helpers import make_scrapable_url_entry
@@ -93,34 +95,20 @@ class _StubCrawler:
             ),
         )
 
-    async def crawl_all(
+    async def crawl_batches(
         self,
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
-        on_result=None,
-        on_batch=None,
-        should_stop=None,
         batch_size: int = 25,
-    ) -> list[AsyncCrawlerFetchResult]:
+    ) -> AsyncIterator[list[AsyncCrawlerFetchResult]]:
         self.calls.append([entry.url for entry in entries])
-        results: list[AsyncCrawlerFetchResult] = []
         for start in range(0, len(entries), batch_size):
-            if should_stop is not None and should_stop():
-                break
             batch: list[AsyncCrawlerFetchResult] = []
             for index in range(start, min(start + batch_size, len(entries))):
                 if self._interrupt_after is not None and index >= self._interrupt_after:
                     raise KeyboardInterrupt
-                result = self._result(entries[index])
-                results.append(result)
-                batch.append(result)
-                if on_result:
-                    on_result(result)
-            if on_batch:
-                pending = on_batch(batch)
-                if inspect.isawaitable(pending):
-                    await pending
-        return results
+                batch.append(self._result(entries[index]))
+            yield batch
 
 
 class _StubStore:
@@ -173,18 +161,12 @@ async def _run_crawl(
     store: _StubStore,
     *,
     options: ScrapeOptions | None = None,
-    on_progress=None,
-    on_batch=None,
-    should_stop=None,
     batch_size: int = 25,
 ):
     return await crawl(
         options or ScrapeOptions(),
         session_factory=lambda: _session_factory(_StubSession()),
         deps=_deps(registry, crawler, store),
-        on_progress=on_progress,
-        on_batch=on_batch,
-        should_stop=should_stop,
         batch_size=batch_size,
     )
 
@@ -208,57 +190,41 @@ async def test_crawl_counts_results_and_reports_errors():
     assert outcome.interrupted is False
 
 
-async def test_crawl_emits_phase_tagged_progress():
+async def test_crawl_batches_are_phase_tagged():
     entries = [_entry("https://www.ird.gov.lk/a")]
-    events: list[tuple] = []
+    batches: list[tuple[CrawlPhase, list[str]]] = []
 
-    await _run_crawl(
-        _StubRegistry(entries),
-        _StubCrawler(),
-        _StubStore(),
-        on_progress=lambda phase, result: events.append((phase, result.url)),
-    )
+    async for batch in crawl_batches(
+        ScrapeOptions(),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(_StubRegistry(entries), _StubCrawler(), _StubStore()),
+    ):
+        batches.append((batch.phase, [result.url for result in batch.results]))
 
-    assert events == [(CrawlPhase.registry, "https://www.ird.gov.lk/a")]
+    assert batches == [(CrawlPhase.registry, ["https://www.ird.gov.lk/a"])]
 
 
-async def test_crawl_reports_batches_and_stops_when_requested():
+async def test_crawl_batches_stop_when_the_consumer_closes():
     entries = [
         _entry("https://www.ird.gov.lk/a"),
         _entry("https://www.ird.gov.lk/b"),
         _entry("https://www.ird.gov.lk/c"),
         _entry("https://www.ird.gov.lk/d"),
     ]
-    crawler = _StubCrawler()
-    batches: list[tuple[CrawlPhase, list[str]]] = []
-    state = {"stop": False}
 
-    def on_batch(phase, batch):
-        batches.append((phase, [result.url for result in batch]))
-        if len(batches) == 1:
-            state["stop"] = True
-
-    outcome = await _run_crawl(
-        _StubRegistry(entries),
-        crawler,
-        _StubStore(),
-        on_batch=on_batch,
-        should_stop=lambda: state["stop"],
+    batches = crawl_batches(
+        ScrapeOptions(),
+        session_factory=lambda: _session_factory(_StubSession()),
+        deps=_deps(_StubRegistry(entries), _StubCrawler(), _StubStore()),
         batch_size=2,
     )
+    first = await anext(batches)
+    await batches.aclose()
 
-    assert outcome.cancelled is True
-    assert [result.url for result in outcome.results] == [
+    assert [result.url for result in first.results] == [
         "https://www.ird.gov.lk/a",
         "https://www.ird.gov.lk/b",
     ]
-    assert batches == [
-        (
-            CrawlPhase.registry,
-            ["https://www.ird.gov.lk/a", "https://www.ird.gov.lk/b"],
-        )
-    ]
-    assert crawler.calls == [[entry.url for entry in entries]]
 
 
 async def test_crawl_discovers_and_crawls_new_pdfs():
@@ -300,7 +266,12 @@ async def test_crawl_returns_partial_results_on_interrupt():
     ]
     crawler = _StubCrawler(interrupt_after=1)
 
-    outcome = await _run_crawl(_StubRegistry(entries), crawler, _StubStore())
+    outcome = await _run_crawl(
+        _StubRegistry(entries),
+        crawler,
+        _StubStore(),
+        batch_size=1,
+    )
 
     assert outcome.interrupted is True
     assert [result.url for result in outcome.results] == ["https://www.ird.gov.lk/a"]
@@ -384,7 +355,7 @@ async def test_scrape_saves_when_crawl_completes():
     assert outcome.save.saved == 1
 
 
-async def test_scrape_persists_each_batch_without_retaining_results():
+async def test_scrape_persists_each_batch():
     entries = [
         _entry("https://www.ird.gov.lk/a"),
         _entry("https://www.ird.gov.lk/b"),
@@ -401,8 +372,8 @@ async def test_scrape_persists_each_batch_without_retaining_results():
 
     assert outcome.save is not None
     assert outcome.save.saved == 3
+    assert outcome.crawl.succeeded == 3
     assert len(store.saved) == 3
-    assert outcome.crawl.results == []
 
 
 async def test_scrape_does_not_save_interrupted_crawl():
@@ -423,32 +394,25 @@ async def test_scrape_does_not_save_interrupted_crawl():
     assert store.saved == []
 
 
-async def test_scrape_keeps_completed_batches_when_cancelled():
+async def test_scrape_batches_keep_committed_work_when_closed_early():
     entries = [
         _entry("https://www.ird.gov.lk/a"),
         _entry("https://www.ird.gov.lk/b"),
         _entry("https://www.ird.gov.lk/c"),
     ]
     store = _StubStore()
-    state = {"stop": False}
 
-    def on_batch(_phase, _batch):
-        state["stop"] = True
-
-    outcome = await scrape(
+    batches = scrape_batches(
         ScrapeOptions(),
         session_factory=lambda: _session_factory(_StubSession()),
         deps=_deps(_StubRegistry(entries), _StubCrawler(), store),
-        on_batch=on_batch,
-        should_stop=lambda: state["stop"],
         batch_size=1,
     )
+    first = await anext(batches)
+    await batches.aclose()
 
-    assert outcome.cancelled is True
-    assert outcome.save is not None
-    assert outcome.save.saved == 1
+    assert first.save.saved == 1
     assert len(store.saved) == 1
-    assert outcome.crawl.results == []
 
 
 async def test_get_scrape_status_reads_the_store():

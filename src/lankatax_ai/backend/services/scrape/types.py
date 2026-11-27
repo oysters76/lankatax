@@ -8,7 +8,7 @@ request shape, outcomes, ports and wiring the service needs.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 from enum import Enum
 from typing import Protocol
@@ -21,19 +21,19 @@ from lankatax_ai.backend.scraper.crawler import AsyncCrawlerFetchResult
 from lankatax_ai.backend.scraper.registry import ScrapableURL
 
 __all__ = [
-    "BatchCallback",
+    "CrawlBatch",
     "CrawlOutcome",
     "CrawlPhase",
+    "CrawlSummary",
     "Crawler",
     "CrawlerFactory",
-    "ProgressCallback",
     "SaveOutcome",
+    "ScrapeBatch",
     "ScrapeDeps",
     "ScrapeOptions",
     "ScrapeOutcome",
     "ScrapeStatusRecord",
     "ScrapeStore",
-    "StopCheck",
     "StoreFactory",
     "UrlRegistry",
 ]
@@ -44,21 +44,13 @@ class CrawlPhase(Enum):
     discovered = "discovered"
 
 
-ProgressCallback = Callable[[CrawlPhase, AsyncCrawlerFetchResult], None]
-BatchCallback = Callable[[CrawlPhase, list[AsyncCrawlerFetchResult]], Awaitable[None] | None]
-StopCheck = Callable[[], bool]
-
-
 class Crawler(Protocol):
-    async def crawl_all(
+    def crawl_batches(
         self,
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
-        on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
-        on_batch: Callable[[list[AsyncCrawlerFetchResult]], Awaitable[None] | None] | None = None,
-        should_stop: StopCheck | None = None,
         batch_size: int = 25,
-    ) -> list[AsyncCrawlerFetchResult]: ...
+    ) -> AsyncIterator[list[AsyncCrawlerFetchResult]]: ...
 
 
 class UrlRegistry(Protocol):
@@ -89,15 +81,27 @@ class ScrapeOptions:
     discover_pdfs: bool = True
 
 
-@dataclasses.dataclass(slots=True)
-class CrawlOutcome:
+@dataclasses.dataclass(frozen=True, slots=True)
+class CrawlBatch:
+    """One completed unit of crawl work."""
+
+    phase: CrawlPhase
     results: list[AsyncCrawlerFetchResult]
+    discovered: tuple[ScrapableURL, ...] = ()
+
+
+@dataclasses.dataclass(slots=True)
+class CrawlSummary:
     succeeded: int
     failed: int
     discovered: int
     errors: list[str] = dataclasses.field(default_factory=list)
     interrupted: bool = False
-    cancelled: bool = False
+
+
+@dataclasses.dataclass(slots=True)
+class CrawlOutcome(CrawlSummary):
+    results: list[AsyncCrawlerFetchResult] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -106,18 +110,22 @@ class SaveOutcome:
     skipped: int
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class ScrapeBatch:
+    """A crawl batch that has already been persisted."""
+
+    crawl: CrawlBatch
+    save: SaveOutcome
+
+
 @dataclasses.dataclass(slots=True)
 class ScrapeOutcome:
-    crawl: CrawlOutcome
+    crawl: CrawlSummary
     save: SaveOutcome | None = None
 
     @property
     def interrupted(self) -> bool:
         return self.crawl.interrupted
-
-    @property
-    def cancelled(self) -> bool:
-        return self.crawl.cancelled
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import inspect
 import logging
 import random
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Callable
 from enum import Enum
 from types import TracebackType
 from typing import ClassVar, Self
@@ -257,15 +256,12 @@ class AsyncCrawler:
             parsed_page=parsed,
         )
 
-    async def crawl_all(
+    async def crawl_batches(
         self,
         entries: list[ScrapableURL],
         max_concurrent: int = 5,
-        on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
-        on_batch: Callable[[list[AsyncCrawlerFetchResult]], Awaitable[None] | None] | None = None,
-        should_stop: Callable[[], bool] | None = None,
         batch_size: int = 25,
-    ) -> list[AsyncCrawlerFetchResult]:
+    ) -> AsyncIterator[list[AsyncCrawlerFetchResult]]:
         if batch_size < 1:
             raise ValueError("batch_size must be at least 1")
 
@@ -274,30 +270,29 @@ class AsyncCrawler:
         async def _limited(entry: ScrapableURL) -> AsyncCrawlerFetchResult:
             async with semaphore:
                 try:
-                    result = await self.crawl_url(entry)
+                    return await self.crawl_url(entry)
                 except Exception:
                     logger.exception("Crawl failed for %s", entry.url)
-                    result = AsyncCrawlerFetchResult(
+                    return AsyncCrawlerFetchResult(
                         url=entry.url,
                         entry=entry,
                         error=AsyncCrawlerErrorKind.exception,
                     )
-                if on_result:
-                    on_result(result)
-                return result
 
-        results: list[AsyncCrawlerFetchResult] = []
         for start in range(0, len(entries), batch_size):
-            if should_stop is not None and should_stop():
-                break
-
             batch = entries[start : start + batch_size]
-            batch_results = await asyncio.gather(*[_limited(e) for e in batch])
-            results.extend(batch_results)
+            yield await asyncio.gather(*[_limited(e) for e in batch])
 
-            if on_batch:
-                pending = on_batch(batch_results)
-                if inspect.isawaitable(pending):
-                    await pending
-
+    async def crawl_all(
+        self,
+        entries: list[ScrapableURL],
+        max_concurrent: int = 5,
+        on_result: Callable[[AsyncCrawlerFetchResult], None] | None = None,
+    ) -> list[AsyncCrawlerFetchResult]:
+        results: list[AsyncCrawlerFetchResult] = []
+        async for batch in self.crawl_batches(entries, max_concurrent):
+            results.extend(batch)
+            if on_result:
+                for result in batch:
+                    on_result(result)
         return results
