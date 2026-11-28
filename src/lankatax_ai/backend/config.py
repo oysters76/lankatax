@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     job_ingest_max_documents: int = Field(500, gt=0)
     job_enqueue_rate_limit_per_minute: int = Field(10, gt=0)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def connection_string(self) -> str:

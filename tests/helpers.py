@@ -67,3 +67,32 @@ def make_chunk(**overrides) -> Chunk:
         "embedding": [0.1] * 1536,
     }
     return Chunk(**(defaults | overrides))
+
+
+class FakeStructuredLLM:
+    """Stand-in for a chat model that only serves structured outputs.
+
+    Guardrails and graph nodes call ``with_structured_output(schema)`` once and
+    then ``ainvoke``; this fake records the calls and returns the scripted
+    response for each schema.
+    """
+
+    def __init__(self, responses: dict[type, object] | None = None) -> None:
+        self._responses = responses or {}
+        self.calls: list[object] = []
+        self.error: Exception | None = None
+
+    def with_structured_output(self, schema: type) -> object:
+        response = self._responses.get(schema)
+        llm = self
+
+        class _Runner:
+            async def ainvoke(self, messages: object) -> object:
+                llm.calls.append(messages)
+                if llm.error is not None:
+                    raise llm.error
+                if response is None:
+                    raise AssertionError(f"no scripted response for {schema!r}")
+                return response
+
+        return _Runner()
