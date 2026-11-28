@@ -83,8 +83,9 @@ EXPECTED_ACTIONS = {
     "docs",
 }
 
-#: Routes that were 501 stubs before the job API; they must still refuse a missing token.
-PROTECTED_JOB_ROUTES = [
+#: Job, scrape, ingest and refresh routes; all of them require a bearer token.
+#: They replaced the 501 stubs, so the stub test became this missing-token check.
+PROTECTED_ROUTES = [
     ("POST", INGEST_URL),
     ("GET", f"{INGEST_URL}/status"),
     ("GET", f"{SCRAPE_URL}/urls"),
@@ -93,6 +94,9 @@ PROTECTED_JOB_ROUTES = [
     ("POST", PIPELINE_REFRESH_URL),
     ("GET", JOBS_URL),
     ("POST", JOBS_URL),
+    ("GET", f"{JOBS_URL}/run-1"),
+    ("POST", f"{JOBS_URL}/run-1/cancel"),
+    ("POST", f"{JOBS_URL}/run-1/replay"),
 ]
 
 
@@ -461,8 +465,8 @@ def test_open_docs_mode(open_client: TestClient) -> None:
     assert links["docs"]["auth_required"] is False
 
 
-@pytest.mark.parametrize(("method", "path"), PROTECTED_JOB_ROUTES)
-def test_job_routes_need_a_token(client: TestClient, method: str, path: str) -> None:
+@pytest.mark.parametrize(("method", "path"), PROTECTED_ROUTES)
+def test_protected_routes_need_a_token(client: TestClient, method: str, path: str) -> None:
     response = client.request(method, path)
 
     assert response.status_code == 401
