@@ -54,7 +54,7 @@ class InputValidator:
             llm.with_structured_output(GuardClassification) if llm is not None else None
         )
 
-    async def validate(self, question: str) -> InputGuardResult:
+    async def validate(self, question: str, *, history: str = "") -> InputGuardResult:
         cleaned = redact_pii(question.strip())
         if not cleaned:
             return InputGuardResult(InputVerdict.refuse, GuardrailReason.empty)
@@ -78,7 +78,7 @@ class InputValidator:
             return InputGuardResult(InputVerdict.allow, question=cleaned)
 
         try:
-            messages = self._prompt.format_messages(question=cleaned)
+            messages = self._prompt.format_messages(question=cleaned, history=history)
             raw = await self._structured.ainvoke(messages)
             classification = GuardClassification.model_validate(raw)
         except Exception:

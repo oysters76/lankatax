@@ -96,3 +96,14 @@ async def test_classifier_failure_falls_back_to_allow():
 
     assert result.verdict is InputVerdict.allow
     assert result.question == "How is PAYE withheld?"
+
+
+async def test_history_is_passed_to_the_classifier():
+    validator, fake = _validator(GuardClassification(allowed=True))
+
+    await validator.validate(
+        "And from 2024 onwards?",
+        history="user: What is the standard VAT rate?",
+    )
+
+    assert "What is the standard VAT rate?" in str(fake.calls[0])
