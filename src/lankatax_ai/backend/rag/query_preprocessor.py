@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import string
 
 from lankatax_ai.backend.rag.types import PreprocessedQuery
 from lankatax_ai.backend.types import QueryType
@@ -9,8 +10,6 @@ from lankatax_ai.backend.utils import fuzzy_match
 
 
 class QueryPreprocessor:
-    _PUNCTUATION = ".,;:!?()[]{}'\"`"
-
     def __init__(self, fuzzy_threshold: float = 0.75) -> None:
         data_dir = importlib.resources.files("lankatax_ai.backend.rag.data")
         self._acronyms: dict[str, str] = json.loads((data_dir / "tax_acronyms.json").read_text())
@@ -34,7 +33,7 @@ class QueryPreprocessor:
     def _expand_acronyms(self, query: str) -> str:
         expanded = []
         for token in query.split():
-            stripped = token.strip(self._PUNCTUATION)
+            stripped = token.strip(string.punctuation)
             clean = stripped.upper()
             # Only uppercase tokens can be acronyms: lowercase words such as
             # "it" collide with IT (Income Tax) and must not be expanded.
@@ -63,7 +62,7 @@ class QueryPreprocessor:
         tokens = query.split()
         corrected = []
         for token in tokens:
-            stripped = token.strip(self._PUNCTUATION)
+            stripped = token.strip(string.punctuation)
             lower = stripped.lower()
             if (
                 not stripped.isalpha()
