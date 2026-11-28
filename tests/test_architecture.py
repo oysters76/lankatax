@@ -3,6 +3,8 @@
 Rules:
 - ``backend`` stays transport-free: no Typer or Rich.
 - FastAPI is allowed only in ``backend/api``, the HTTP adapter.
+- Hatchet is confined to ``backend/jobs``, the execution adapter.
+- Services must not import the Hatchet adapter.
 
 The CLI may import Typer and Rich; it is not scanned here.
 """
@@ -25,15 +27,19 @@ def _python_files(root: Path) -> list[Path]:
     return sorted(root.rglob("*.py"))
 
 
-def _imported_roots(path: Path) -> set[str]:
+def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    roots: set[str] = set()
+    modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
+            modules.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            roots.add(node.module.split(".")[0])
-    return roots
+            modules.add(node.module)
+    return modules
+
+
+def _imported_roots(path: Path) -> set[str]:
+    return {module.split(".")[0] for module in _imported_modules(path)}
 
 
 def _offenders(root: Path, banned: set[str], *, allowed: Path | None = None) -> list[str]:
@@ -56,3 +62,36 @@ def test_backend_does_not_import_cli_frameworks() -> None:
 def test_fastapi_is_confined_to_the_api_package() -> None:
     offenders = _offenders(BACKEND, {"fastapi"}, allowed=API)
     assert not offenders, "FastAPI belongs in backend/api only:\n" + "\n".join(offenders)
+
+
+def _module_offenders(root: Path, module: str, *, allowed: Path | None = None) -> list[str]:
+    found: list[str] = []
+    for path in _python_files(root):
+        if allowed is not None and path.is_relative_to(allowed):
+            continue
+        hits = {
+            imported
+            for imported in _imported_modules(path)
+            if imported == module or imported.startswith(f"{module}.")
+        }
+        if hits:
+            relative = path.relative_to(PACKAGE_ROOT)
+            found.append(f"{relative} imports {', '.join(sorted(hits))}")
+    return found
+
+
+def test_hatchet_is_confined_to_the_jobs_adapter() -> None:
+    offenders = _module_offenders(
+        BACKEND,
+        "hatchet_sdk",
+        allowed=BACKEND / "jobs",
+    )
+    assert not offenders, "Hatchet belongs in backend/jobs only:\n" + "\n".join(offenders)
+
+
+def test_services_do_not_import_the_hatchet_adapter() -> None:
+    offenders = _module_offenders(
+        BACKEND / "services",
+        "lankatax_ai.backend.jobs",
+    )
+    assert not offenders, "Services must not depend on backend/jobs:\n" + "\n".join(offenders)
