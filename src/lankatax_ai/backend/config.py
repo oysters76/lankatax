@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     hatchet_client_token: SecretStr | None = None
     hatchet_client_tls_strategy: Literal["tls", "none"] | None = None
     hatchet_client_host_port: str | None = None
+    hatchet_client_server_url: str | None = None
     hatchet_dashboard_url: str | None = None
     hatchet_worker_name: str = "lankatax-worker"
     hatchet_worker_slots: int = Field(2, ge=1, le=100)
