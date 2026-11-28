@@ -6,7 +6,7 @@ single outcome.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from lankatax_ai.backend.documents import ScrapeStatusRecord
 from lankatax_ai.backend.scraper.pdf_discovery import discover_pdf_links
@@ -38,7 +38,7 @@ async def crawl_batches(
     session_factory: SessionFactory,
     deps: ScrapeDeps,
     batch_size: int = 25,
-) -> AsyncIterator[CrawlBatch]:
+) -> AsyncGenerator[CrawlBatch]:
     """Yield completed registry and discovered-PDF batches.
 
     Consumption controls backpressure and cancellation: stop iterating and the
@@ -165,7 +165,7 @@ async def scrape_batches(
     session_factory: SessionFactory,
     deps: ScrapeDeps,
     batch_size: int = 25,
-) -> AsyncIterator[ScrapeBatch]:
+) -> AsyncGenerator[ScrapeBatch]:
     """Yield crawl batches after each one has been persisted.
 
     Stop iterating to stop the crawl. Batches already yielded stay committed.
