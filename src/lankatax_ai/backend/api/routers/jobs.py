@@ -97,9 +97,13 @@ def _task_schema(task: JobTask) -> JobTaskSchema:
 
 def _details_schema(request: Request, details: JobDetails) -> JobDetailsSchema:
     links = _summary_links(request, details)
-    if settings.hatchet_dashboard_url:
+    dashboard_url = settings.hatchet_dashboard_url
+    dashboard_tenant = settings.hatchet_dashboard_tenant
+    if dashboard_url and dashboard_tenant:
+        # The dashboard addresses runs under the tenant, not at /runs/{id};
+        # without the tenant the link would land on a blank page.
         links["dashboard"] = Link(
-            href=f"{settings.hatchet_dashboard_url.rstrip('/')}/runs/{details.id}",
+            href=(f"{dashboard_url.rstrip('/')}/tenants/{dashboard_tenant}/runs/{details.id}"),
             title="Hatchet run",
         )
     return JobDetailsSchema(

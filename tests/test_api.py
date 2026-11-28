@@ -25,7 +25,7 @@ from lankatax_ai.backend.api import create_app
 from lankatax_ai.backend.api.deps import ApiDeps
 from lankatax_ai.backend.api.security import AuthConfig
 from lankatax_ai.backend.cache.types import CacheStats
-from lankatax_ai.backend.config import Settings
+from lankatax_ai.backend.config import Settings, settings
 from lankatax_ai.backend.documents import ScrapeStatusRecord
 from lankatax_ai.backend.ingestion.types import EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.rag.types import RetrievalResult
@@ -40,6 +40,7 @@ from lankatax_ai.backend.services.jobs import (
     JobRequest,
     JobStatus,
     JobSummary,
+    JobType,
 )
 from lankatax_ai.backend.services.scrape import ScrapeDeps
 from lankatax_ai.backend.services.search import SearchDeps
@@ -239,7 +240,19 @@ class _FakeJobGateway:
         return []
 
     async def get(self, run_id: str) -> JobDetails:
-        raise NotFoundError("job not found")
+        if run_id != "run-1":
+            raise NotFoundError("job not found")
+        return JobDetails(
+            id="run-1",
+            type=JobType.pipeline_refresh,
+            status=JobStatus.succeeded,
+            created_at=datetime.now(UTC),
+            started_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
+            duration_ms=1000,
+            input={"full": True},
+            output={"saved": 1},
+        )
 
     async def status(self, run_id: str) -> JobStatus:
         return JobStatus.queued
@@ -611,6 +624,28 @@ def test_job_detail_maps_not_found(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
+
+
+def test_job_detail_links_to_the_tenant_run(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "hatchet_dashboard_url", "http://localhost:8888")
+    monkeypatch.setattr(settings, "hatchet_dashboard_tenant", "tenant-1")
+    token = _login(client)
+
+    body = client.get(f"{JOBS_URL}/run-1", headers=_auth(token)).json()
+
+    assert body["links"]["dashboard"]["href"] == (
+        "http://localhost:8888/tenants/tenant-1/runs/run-1"
+    )
+
+
+def test_job_detail_omits_the_dashboard_without_a_tenant(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "hatchet_dashboard_url", "http://localhost:8888")
+    monkeypatch.setattr(settings, "hatchet_dashboard_tenant", None)
+    token = _login(client)
+
+    body = client.get(f"{JOBS_URL}/run-1", headers=_auth(token)).json()
+
+    assert "dashboard" not in body["links"]
 
 
 def test_job_cancel_and_replay_return_actions(client: TestClient) -> None:
