@@ -135,3 +135,4 @@ class ScrapeDeps:
     registry: UrlRegistry
     crawler_factory: CrawlerFactory
     store_factory: StoreFactory
+    base_host: str = "ird.gov.lk"

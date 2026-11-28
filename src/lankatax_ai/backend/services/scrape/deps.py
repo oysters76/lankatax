@@ -7,6 +7,7 @@ same way.
 
 from __future__ import annotations
 
+from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.documents import DocumentStore
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler
 from lankatax_ai.backend.scraper.registry import URLRegistry
@@ -21,4 +22,5 @@ def build_scrape_deps(registry: UrlRegistry | None = None) -> ScrapeDeps:
         registry=registry,
         crawler_factory=AsyncCrawler,
         store_factory=DocumentStore,
+        base_host=settings.scrape_base_host,
     )

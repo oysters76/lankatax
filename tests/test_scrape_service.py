@@ -431,6 +431,7 @@ def test_build_scrape_deps_uses_production_adapters():
 
     assert isinstance(deps.registry, URLRegistry)
     assert deps.store_factory is DocumentStore
+    assert deps.base_host == "ird.gov.lk"
 
 
 @pytest.mark.db

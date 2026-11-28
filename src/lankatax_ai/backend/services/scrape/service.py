@@ -58,7 +58,9 @@ async def crawl_batches(
         async for batch in crawler.crawl_batches(entries, batch_size=batch_size):
             new_pdfs: list[ScrapableURL] = []
             if options.discover_pdfs:
-                new_pdfs = discover_pdf_links(batch, known_for_discovery, registry_urls)
+                new_pdfs = discover_pdf_links(
+                    batch, known_for_discovery, registry_urls, deps.base_host
+                )
                 for pdf in new_pdfs:
                     discovered.append(pdf)
                     known_for_discovery.add(pdf.url)

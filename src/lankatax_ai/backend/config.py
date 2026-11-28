@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Default chunking strategy (structural, semantic, recursive)
     chunk_strategy: str = "structural"
 
+    # Scraping. Discovered links are kept only on this host and its subdomains,
+    # and http is upgraded to https. Set SCRAPE_BASE_HOST for another site.
+    scrape_base_host: str = "ird.gov.lk"
+
     # Logging
     log_level: str = "INFO"
 
