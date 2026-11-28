@@ -46,6 +46,11 @@ async def test_conversations_are_isolated():
     assert [turn.content for turn in await store.load(second, limit=5)] == ["second"]
 
 
+async def test_unknown_conversation_is_not_found():
+    with pytest.raises(NotFoundError):
+        await InMemoryConversationStore().load("missing", limit=5)
+
+
 def test_unknown_roles_are_rejected():
     with pytest.raises(ValueError, match="role"):
         Turn(role="system", content="not allowed")

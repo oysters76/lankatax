@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from uuid import uuid4
 
 from lankatax_ai.backend.memory.types import Turn
+from lankatax_ai.backend.services.errors import NotFoundError
 
 __all__ = ["InMemoryConversationStore"]
 
@@ -23,9 +24,11 @@ class InMemoryConversationStore:
         return conversation_id
 
     async def load(self, conversation_id: str, *, limit: int) -> list[Turn]:
+        if conversation_id not in self._turns:
+            raise NotFoundError("Conversation not found")
         if limit <= 0:
             return []
-        return list(self._turns.get(conversation_id, [])[-limit:])
+        return list(self._turns[conversation_id][-limit:])
 
     async def append(self, conversation_id: str, turns: Sequence[Turn]) -> None:
         self._turns[conversation_id].extend(turns)
