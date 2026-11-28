@@ -1,5 +1,9 @@
 from lankatax_ai.backend.db.models import Document
-from lankatax_ai.backend.documents.page_marker import page_numbers, strip_page_markers
+from lankatax_ai.backend.documents.page_marker import (
+    format_page_marker,
+    page_numbers,
+    strip_page_markers,
+)
 from lankatax_ai.backend.ingestion.types import (
     Chunk,
     ChunkCitationMeta,
@@ -32,10 +36,26 @@ def merge_blocks_to_chunks(groups: list[list[RawBlock]], config: ChunkConfig) ->
             else:
                 merged.append(current)
                 overlap = " ".join(current.split()[-config.overlap_tokens :])
-                current = overlap + "\n" + block.content
+                current = _overlap_with_page(overlap, current) + "\n" + block.content
     if current.strip():
         merged.append(current)
     return merged
+
+
+def _overlap_with_page(overlap: str, current: str) -> str:
+    """Keep the page marker of the page the overlap text came from.
+
+    Chunks that start with overlap would otherwise only carry the *next* page's
+    marker, so ``page_start`` would point one page too far.
+    """
+    if not overlap:
+        return ""
+    if page_numbers(overlap):
+        return overlap
+    current_pages = page_numbers(current)
+    if not current_pages:
+        return overlap
+    return f"{format_page_marker(current_pages[-1])} {overlap}"
 
 
 def make_chunk(
