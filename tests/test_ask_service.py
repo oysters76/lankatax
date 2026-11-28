@@ -30,7 +30,12 @@ def _result(score: float = 0.8) -> RetrievalResult:
         score=score,
         vector_score=score,
         keyword_score=None,
-        metadata={"document_title": "PAYE guide", "from_url": "https://ird.gov.lk/paye"},
+        metadata={
+            "document_title": "PAYE guide",
+            "from_url": "https://ird.gov.lk/paye",
+            "page_start": 4,
+            "page_end": 5,
+        },
     )
 
 
@@ -90,6 +95,8 @@ async def test_ask_returns_answer_and_citations_and_persists():
     assert outcome.refused is False
     assert outcome.citations[0].title == "PAYE guide"
     assert outcome.citations[0].url == "https://ird.gov.lk/paye"
+    assert outcome.citations[0].page_start == 4
+    assert outcome.citations[0].page_end == 5
     assert outcome.usage.llm_calls == 3
     assert outcome.usage.retrieved_chunks == 1
     assert outcome.timings == {"answer": 4, "retrieve": 7}
@@ -187,10 +194,13 @@ async def test_unknown_citation_numbers_are_dropped():
 
 
 async def test_options_are_validated():
+    assert AskOptions().dedup_threshold == 0.9
     with pytest.raises(ValidationError, match="Top-k"):
         AskOptions(top_k=0)
     with pytest.raises(ValidationError, match="min_score"):
         AskOptions(min_score=2.0)
+    with pytest.raises(ValidationError, match="dedup_threshold"):
+        AskOptions(dedup_threshold=1.1)
 
 
 async def test_busy_slot_rejects_before_running_the_graph():

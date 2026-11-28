@@ -73,6 +73,7 @@ def test_ask_settings_are_read(monkeypatch):
     monkeypatch.setenv("ASK_MAX_CONCURRENCY", "3")
     monkeypatch.setenv("ASK_TRUSTED_PROXIES", "10.0.0.0/8")
     monkeypatch.setenv("ASK_MAX_BODY_BYTES", "4096")
+    monkeypatch.setenv("ASK_DEDUP_THRESHOLD", "0.95")
 
     settings = _load()
 
@@ -86,6 +87,7 @@ def test_ask_settings_are_read(monkeypatch):
     assert settings.ask_max_concurrency == 3
     assert settings.ask_trusted_proxies == "10.0.0.0/8"
     assert settings.ask_max_body_bytes == 4096
+    assert settings.ask_dedup_threshold == 0.95
 
 
 def test_langsmith_names_are_read(monkeypatch):

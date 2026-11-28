@@ -39,6 +39,8 @@ def _response(request: Request, outcome: AskOutcome) -> AskResponse:
                 url=citation.url,
                 snippet=citation.snippet,
                 score=citation.score,
+                page_start=citation.page_start,
+                page_end=citation.page_end,
             )
             for citation in outcome.citations
         ],

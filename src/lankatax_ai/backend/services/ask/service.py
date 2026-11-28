@@ -146,11 +146,17 @@ def _resolve_citations(
                 url=_metadata_url(result.metadata),
                 snippet=result.content[:280],
                 score=result.score,
+                page_start=_page_number(result.metadata.get("page_start")),
+                page_end=_page_number(result.metadata.get("page_end")),
             )
         )
         seen.add(number)
 
     return tuple(citations)
+
+
+def _page_number(value: object) -> int | None:
+    return value if isinstance(value, int) else None
 
 
 def _metadata_url(metadata: dict[str, object]) -> str | None:

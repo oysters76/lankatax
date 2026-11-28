@@ -50,6 +50,7 @@ class AskOptions:
     context_token_budget: int = dataclasses.field(
         default_factory=lambda: settings.ask_context_token_budget
     )
+    dedup_threshold: float = dataclasses.field(default_factory=lambda: settings.ask_dedup_threshold)
 
     def __post_init__(self) -> None:
         require_range("Top-k", self.top_k, limits.MIN_TOP_K, limits.MAX_TOP_K)
@@ -60,6 +61,8 @@ class AskOptions:
             raise ValidationError("answer_max_tokens must be positive")
         if self.context_token_budget < 1:
             raise ValidationError("context_token_budget must be positive")
+        if not 0.0 <= self.dedup_threshold <= 1.0:
+            raise ValidationError("dedup_threshold must be between 0 and 1")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -83,6 +86,8 @@ class Citation:
     url: str | None
     snippet: str
     score: float
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

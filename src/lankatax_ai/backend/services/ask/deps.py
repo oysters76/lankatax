@@ -121,5 +121,6 @@ def _search_options(options: AskOptions) -> SearchOptions:
         rerank=options.rerank,
         include_context=True,
         token_budget=options.context_token_budget,
+        dedup_threshold=options.dedup_threshold,
         llm_provider=options.provider,
     )

@@ -316,6 +316,8 @@ class CitationSchema(BaseModel):
     url: str | None = None
     snippet: str
     score: float
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 class AskUsageSchema(BaseModel):

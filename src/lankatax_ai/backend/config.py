@@ -116,6 +116,7 @@ class Settings(BaseSettings):
     ask_min_score: float = Field(0.2, ge=0.0, le=1.0)
     ask_answer_max_tokens: int = Field(800, ge=1)
     ask_context_token_budget: int = Field(3000, ge=1)
+    ask_dedup_threshold: float = Field(0.9, ge=0.0, le=1.0)
     ask_memory_turns: int = Field(6, ge=0, le=50)
     ask_max_question_chars: int = Field(2000, ge=1)
     ask_guard_input: bool = True

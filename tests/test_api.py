@@ -142,8 +142,10 @@ def _result() -> RetrievalResult:
         metadata={
             "from_url": "https://www.ird.gov.lk/paye",
             "document_title": "PAYE guide",
-            "document_kind": "page",
+            "document_kind": "pdf",
             "order": 0,
+            "page_start": 7,
+            "page_end": 8,
         },
         embedding=[0.1, 0.2, 0.3],
     )
@@ -552,6 +554,8 @@ def test_ask_is_public_and_returns_an_answer_with_citations(
     assert body["answer"] == "Employers withhold it monthly [1]."
     assert body["citations"][0]["title"] == "PAYE guide"
     assert body["citations"][0]["url"] == "https://www.ird.gov.lk/paye"
+    assert body["citations"][0]["page_start"] == 7
+    assert body["citations"][0]["page_end"] == 8
     assert body["usage"]["llm_calls"] == 2
     assert body["usage"]["retrieved_chunks"] == 1
     assert body["conversation_id"]
