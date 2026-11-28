@@ -93,6 +93,8 @@ class FakeStructuredLLM:
                     raise llm.error
                 if response is None:
                     raise AssertionError(f"no scripted response for {schema!r}")
+                if isinstance(response, list):
+                    return response.pop(0)
                 return response
 
         return _Runner()
