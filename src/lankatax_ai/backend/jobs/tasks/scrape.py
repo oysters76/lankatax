@@ -9,7 +9,13 @@ from hatchet_sdk.context.context import Context
 
 from lankatax_ai.backend.jobs.contracts import ScrapeInput, ScrapeOutput
 from lankatax_ai.backend.jobs.deps import JobRuntime
+from lankatax_ai.backend.jobs.observability import (
+    job_event,
+    record_job_completed,
+    record_job_started,
+)
 from lankatax_ai.backend.jobs.policies import SCRAPE_HEARTBEAT
+from lankatax_ai.backend.services.jobs.types import JobType
 from lankatax_ai.backend.services.scrape import ScrapeOptions, scrape_batches
 
 __all__ = ["run_scrape"]
@@ -20,6 +26,7 @@ _MAX_ERRORS = 20
 async def run_scrape(payload: ScrapeInput, ctx: Context, runtime: JobRuntime) -> ScrapeOutput:
     """Consume scrape batches, stopping and reporting partial progress."""
     started = time.perf_counter()
+    record_job_started(JobType.scrape_registry)
     saved = 0
     skipped = 0
     failed = 0
@@ -52,17 +59,24 @@ async def run_scrape(payload: ScrapeInput, ctx: Context, runtime: JobRuntime) ->
                         )
 
             ctx.refresh_timeout(SCRAPE_HEARTBEAT)
-            ctx.log(
-                {
-                    "event": "scrape.batch",
-                    "phase": batch.crawl.phase.value,
-                    "saved": batch.save.saved,
-                    "skipped": batch.save.skipped,
-                    "failed": failed,
-                    "discovered": discovered,
-                }
+            job_event(
+                ctx,
+                event="scrape.batch",
+                job_type=JobType.scrape_registry,
+                phase=batch.crawl.phase.value,
+                saved=batch.save.saved,
+                skipped=batch.save.skipped,
+                failed=failed,
+                discovered=discovered,
             )
 
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    status = "cancelled" if ctx.is_cancelled else ("partial" if failed else "succeeded")
+    record_job_completed(
+        JobType.scrape_registry,
+        status=status,
+        duration_ms=duration_ms,
+    )
     return ScrapeOutput(
         saved=saved,
         skipped=skipped,
@@ -70,5 +84,5 @@ async def run_scrape(payload: ScrapeInput, ctx: Context, runtime: JobRuntime) ->
         discovered=discovered,
         partial=failed > 0,
         errors=errors,
-        duration_ms=int((time.perf_counter() - started) * 1000),
+        duration_ms=duration_ms,
     )

@@ -16,8 +16,14 @@ from lankatax_ai.backend.jobs.contracts import (
     IngestOutput,
 )
 from lankatax_ai.backend.jobs.deps import JobRuntime
+from lankatax_ai.backend.jobs.observability import (
+    job_event,
+    record_job_completed,
+    record_job_started,
+)
 from lankatax_ai.backend.jobs.policies import INGEST_HEARTBEAT
 from lankatax_ai.backend.services.corpus import finalize_ingest
+from lankatax_ai.backend.services.jobs.types import JobType
 
 __all__ = ["run_ingest", "run_ingest_document"]
 
@@ -30,8 +36,10 @@ async def _run_documents(
     runtime: JobRuntime,
     doc_ids: list[UUID],
     max_tokens: int | None,
+    job_type: JobType,
 ) -> IngestOutput:
     started = time.perf_counter()
+    record_job_started(job_type)
     docs_processed = 0
     chunks_created = 0
     tokens_used = 0
@@ -65,14 +73,14 @@ async def _run_documents(
                     tokens_used += batch.tokens_used
 
                 ctx.refresh_timeout(INGEST_HEARTBEAT)
-                ctx.log(
-                    {
-                        "event": "ingest.document",
-                        "document_id": str(batch.document_id),
-                        "chunks": batch.chunks_created,
-                        "tokens": batch.tokens_used,
-                        "error": batch.error,
-                    }
+                job_event(
+                    ctx,
+                    event="ingest.document",
+                    job_type=job_type,
+                    document_id=str(batch.document_id),
+                    chunks=batch.chunks_created,
+                    tokens=batch.tokens_used,
+                    error=batch.error,
                 )
 
     await finalize_ingest(
@@ -80,6 +88,14 @@ async def _run_documents(
         run_id=ctx.workflow_run_id,
     )
 
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    status = "cancelled" if ctx.is_cancelled else ("partial" if errors else "succeeded")
+    record_job_completed(
+        job_type,
+        status=status,
+        duration_ms=duration_ms,
+        tokens=tokens_used,
+    )
     return IngestOutput(
         docs_processed=docs_processed,
         chunks_created=chunks_created,
@@ -87,7 +103,7 @@ async def _run_documents(
         partial=bool(errors) or budget_exhausted,
         budget_exhausted=budget_exhausted,
         errors=errors,
-        duration_ms=int((time.perf_counter() - started) * 1000),
+        duration_ms=duration_ms,
     )
 
 
@@ -112,6 +128,7 @@ async def run_ingest(
         runtime=runtime,
         doc_ids=doc_ids,
         max_tokens=payload.max_tokens,
+        job_type=JobType.ingest_pending,
     )
 
 
@@ -126,4 +143,5 @@ async def run_ingest_document(
         runtime=runtime,
         doc_ids=[payload.document_id],
         max_tokens=payload.max_tokens,
+        job_type=JobType.ingest_document,
     )
