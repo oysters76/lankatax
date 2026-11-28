@@ -15,6 +15,7 @@ __all__ = [
     "InputVerdict",
     "OutputGuardResult",
     "OutputVerdict",
+    "RateLimitRule",
 ]
 
 
@@ -91,3 +92,17 @@ class GroundingCheck(BaseModel):
     grounded: bool = Field(description="Whether every claim is supported by the context")
     unsupported_claims: list[str] = Field(default_factory=list)
     reason: str = Field(default="", description="Short internal rationale")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RateLimitRule:
+    """One quota: at most ``limit`` requests per ``window_seconds``."""
+
+    limit: int
+    window_seconds: float
+
+    def __post_init__(self) -> None:
+        if self.limit < 1:
+            raise ValueError("limit must be at least 1")
+        if self.window_seconds <= 0:
+            raise ValueError("window_seconds must be positive")

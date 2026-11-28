@@ -8,13 +8,15 @@ runs behind multiple replicas.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 
 from lankatax_ai.backend.guardrails import limits
+from lankatax_ai.backend.guardrails.types import RateLimitRule
 from lankatax_ai.backend.services.errors import RateLimitError
+
+_CLEANUP_EVERY = 1024
 
 __all__ = ["QuotaLimiter", "RateLimitRule", "RateLimiter"]
 
@@ -55,20 +57,6 @@ class RateLimiter:
             hits.append(now)
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class RateLimitRule:
-    """One quota: at most ``limit`` requests per ``window_seconds``."""
-
-    limit: int
-    window_seconds: float
-
-    def __post_init__(self) -> None:
-        if self.limit < 1:
-            raise ValueError("limit must be at least 1")
-        if self.window_seconds <= 0:
-            raise ValueError("window_seconds must be positive")
-
-
 class QuotaLimiter:
     """Enforce several windows per caller plus several windows globally.
 
@@ -86,22 +74,32 @@ class QuotaLimiter:
         self._rules = tuple(rules)
         self._global_rules = tuple(global_rules)
         self._clock = clock
-        self._hits: dict[tuple[str, int], deque[float]] = defaultdict(deque)
-        self._global_hits: dict[int, deque[float]] = defaultdict(deque)
+        # Only successful requests create buckets, so rejected keys cannot grow
+        # memory. Stale buckets are dropped periodically.
+        self._hits: dict[tuple[str, int], deque[float]] = {}
+        self._global_hits: dict[int, deque[float]] = {}
+        self._checks = 0
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> None:
         """Record a request for ``key`` or raise :class:`RateLimitError`."""
         now = self._clock()
         async with self._lock:
+            self._checks += 1
+            if self._checks % _CLEANUP_EVERY == 0:
+                self._cleanup(now)
+
             waits = self._waits(
-                [self._hits[(key, index)] for index in range(len(self._rules))],
+                [self._hits.get((key, index), deque()) for index in range(len(self._rules))],
                 self._rules,
                 now,
             )
             waits.extend(
                 self._waits(
-                    [self._global_hits[index] for index in range(len(self._global_rules))],
+                    [
+                        self._global_hits.get(index, deque())
+                        for index in range(len(self._global_rules))
+                    ],
                     self._global_rules,
                     now,
                 )
@@ -113,9 +111,21 @@ class QuotaLimiter:
                     retry_after=retry_after,
                 )
             for index, _rule in enumerate(self._rules):
-                self._hits[(key, index)].append(now)
+                self._hits.setdefault((key, index), deque()).append(now)
             for index, _rule in enumerate(self._global_rules):
-                self._global_hits[index].append(now)
+                self._global_hits.setdefault(index, deque()).append(now)
+
+    def _cleanup(self, now: float) -> None:
+        max_window = max(
+            (rule.window_seconds for rule in (*self._rules, *self._global_rules)),
+            default=0.0,
+        )
+        for bucket_key, bucket in list(self._hits.items()):
+            if not bucket or now - bucket[-1] >= max_window:
+                del self._hits[bucket_key]
+        for index, bucket in list(self._global_hits.items()):
+            if not bucket or now - bucket[-1] >= max_window:
+                del self._global_hits[index]
 
     @staticmethod
     def _waits(
