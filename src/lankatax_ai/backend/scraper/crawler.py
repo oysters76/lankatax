@@ -41,6 +41,7 @@ class AsyncCrawler:
         headers: dict[str, str] | None = None,
         min_delay: float = 3,
         max_delay: float = 5,
+        pdf_timeout: float = 60.0,
     ):
         self._timeout_size = timeout
         self._connect = connect
@@ -52,6 +53,7 @@ class AsyncCrawler:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._min_delay = min_delay
         self._max_delay = max_delay
+        self._pdf_timeout = pdf_timeout
 
         self._regex_heading = re.compile(r"^h[1-6]$")
 
@@ -89,58 +91,90 @@ class AsyncCrawler:
     async def _wait_shorter(self, attempt: int) -> None:
         await asyncio.sleep(2**attempt)
 
-    async def fetch(self, url: str, attempts: int = 3) -> AsyncCrawlerResult:
+    async def fetch(
+        self,
+        url: str,
+        attempts: int = 3,
+        timeout: float | None = None,
+    ) -> AsyncCrawlerResult:
         client = self._client
         if client is None:
             return AsyncCrawlerResult(
                 url=url, status_code=-1, response=None, error=AsyncCrawlerErrorKind.exception
             )
-        try:
-            for attempt in range(attempts):
-                await self._rate_limit()
-                response = await client.get(url)
-                sc = response.status_code
 
-                if sc in (200, 201):
-                    return AsyncCrawlerResult(
-                        url=url, status_code=sc, response=response, error=None
-                    )
-                elif sc == 404:
-                    return AsyncCrawlerResult(
-                        url=url,
-                        status_code=sc,
-                        response=None,
-                        error=AsyncCrawlerErrorKind.not_found,
-                    )
-                elif sc == 401:
-                    return AsyncCrawlerResult(
-                        url=url,
-                        status_code=sc,
-                        response=None,
-                        error=AsyncCrawlerErrorKind.no_permission,
-                    )
-                elif sc == 429:
-                    await self._wait_longer(attempt)
-                elif 500 <= sc <= 503:
-                    await self._wait_shorter(attempt)
-                else:
+        for attempt in range(attempts):
+            await self._rate_limit()
+            try:
+                response = (
+                    await client.get(url, timeout=timeout)
+                    if timeout is not None
+                    else await client.get(url)
+                )
+            except httpx.TransportError as error:
+                # Timeouts and connection resets are common on the registry's
+                # SharePoint server, so retry them like a 5xx.
+                logger.warning(
+                    "Fetch attempt %d/%d failed for %s: %s",
+                    attempt + 1,
+                    attempts,
+                    url,
+                    error,
+                )
+                if attempt + 1 >= attempts:
                     return AsyncCrawlerResult(
                         url=url,
                         status_code=-1,
                         response=None,
-                        error=AsyncCrawlerErrorKind.unknown_error,
+                        error=AsyncCrawlerErrorKind.exception,
                     )
+                await self._wait_longer(attempt)
+                continue
+            except Exception:
+                logger.exception("Unexpected fetch failure for %s", url)
+                return AsyncCrawlerResult(
+                    url=url,
+                    status_code=-1,
+                    response=None,
+                    error=AsyncCrawlerErrorKind.exception,
+                )
 
-            return AsyncCrawlerResult(
-                url=url,
-                status_code=-1,
-                response=None,
-                error=AsyncCrawlerErrorKind.retries_exhausted,
-            )
-        except Exception:  # noqa: BLE001
-            return AsyncCrawlerResult(
-                url=url, status_code=-1, response=None, error=AsyncCrawlerErrorKind.exception
-            )
+            sc = response.status_code
+
+            if sc in (200, 201):
+                return AsyncCrawlerResult(url=url, status_code=sc, response=response, error=None)
+            elif sc == 404:
+                return AsyncCrawlerResult(
+                    url=url,
+                    status_code=sc,
+                    response=None,
+                    error=AsyncCrawlerErrorKind.not_found,
+                )
+            elif sc == 401:
+                return AsyncCrawlerResult(
+                    url=url,
+                    status_code=sc,
+                    response=None,
+                    error=AsyncCrawlerErrorKind.no_permission,
+                )
+            elif sc == 429:
+                await self._wait_longer(attempt)
+            elif 500 <= sc <= 503:
+                await self._wait_shorter(attempt)
+            else:
+                return AsyncCrawlerResult(
+                    url=url,
+                    status_code=-1,
+                    response=None,
+                    error=AsyncCrawlerErrorKind.unknown_error,
+                )
+
+        return AsyncCrawlerResult(
+            url=url,
+            status_code=-1,
+            response=None,
+            error=AsyncCrawlerErrorKind.retries_exhausted,
+        )
 
     def parse_page(
         self, html: str, base_url: str, selectors: list[str] = CONTENT_SELECTORS
@@ -193,7 +227,11 @@ class AsyncCrawler:
         )
 
     async def crawl_url(self, entry: ScrapableURL) -> AsyncCrawlerFetchResult:
-        result = await self.fetch(entry.url)
+        is_pdf = entry.kind == DocumentKind.pdf
+        result = await self.fetch(
+            entry.url,
+            timeout=self._pdf_timeout if is_pdf else None,
+        )
 
         if result.is_error:
             return AsyncCrawlerFetchResult(url=entry.url, entry=entry, error=result.error)
@@ -204,7 +242,7 @@ class AsyncCrawler:
                 url=entry.url, entry=entry, error=AsyncCrawlerErrorKind.unknown_error
             )
 
-        if entry.kind == DocumentKind.pdf:
+        if is_pdf:
             return AsyncCrawlerFetchResult(
                 url=entry.url,
                 entry=entry,

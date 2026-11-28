@@ -56,6 +56,12 @@ def _load() -> Settings:
     return Settings(_env_file=None)
 
 
+def test_scrape_base_host_is_read(monkeypatch):
+    monkeypatch.setenv("SCRAPE_BASE_HOST", "example.lk")
+
+    assert _load().scrape_base_host == "example.lk"
+
+
 def test_langsmith_names_are_read(monkeypatch):
     _clear_langsmith(monkeypatch)
     monkeypatch.setenv("LANGSMITH_API_KEY", "new-key")

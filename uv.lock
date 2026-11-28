@@ -1114,6 +1114,8 @@ dependencies = [
     { name = "numpy" },
     { name = "pdfplumber" },
     { name = "pgvector" },
+    { name = "prometheus-client" },
+    { name = "psycopg2-binary" },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1132,7 +1134,6 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pre-commit" },
-    { name = "psycopg2-binary" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -1159,6 +1160,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "pdfplumber", specifier = ">=0.11.10" },
     { name = "pgvector", specifier = ">=0.5.1" },
+    { name = "prometheus-client", specifier = ">=0.26" },
+    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.4.2" },
     { name = "pydantic", specifier = ">=2.14.3" },
     { name = "pydantic-settings", specifier = ">=2.16.2" },
@@ -1177,7 +1180,6 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=2.4.1" },
     { name = "pre-commit", specifier = ">=4.7.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest-asyncio", specifier = ">=0.26" },
     { name = "ruff", specifier = ">=0.17.4" },

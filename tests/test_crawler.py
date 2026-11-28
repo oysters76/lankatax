@@ -1,10 +1,12 @@
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
 from lankatax_ai.backend.scraper.crawler import AsyncCrawler
 from lankatax_ai.backend.scraper.types import AsyncCrawlerErrorKind, AsyncCrawlerResult
+from lankatax_ai.backend.types import DocumentKind
 from tests.helpers import make_scrapable_url_entry
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -74,7 +76,9 @@ async def test_crawl_batches_stop_when_the_consumer_closes(monkeypatch):
     ]
     fetched: list[str] = []
 
-    async def fake_fetch(url: str, attempts: int = 3) -> AsyncCrawlerResult:
+    async def fake_fetch(
+        url: str, attempts: int = 3, timeout: float | None = None
+    ) -> AsyncCrawlerResult:
         fetched.append(url)
         return AsyncCrawlerResult(
             url=url,
@@ -108,7 +112,9 @@ async def test_crawl_all_isolates_parse_failures(monkeypatch):
     good_url = "https://www.ird.gov.lk/good"
     bad_url = "https://www.ird.gov.lk/bad"
 
-    async def fake_fetch(url: str, attempts: int = 3) -> AsyncCrawlerResult:
+    async def fake_fetch(
+        url: str, attempts: int = 3, timeout: float | None = None
+    ) -> AsyncCrawlerResult:
         return AsyncCrawlerResult(
             url=url,
             status_code=200,
@@ -146,3 +152,73 @@ async def test_crawl_all_isolates_parse_failures(monkeypatch):
     assert by_url[good_url].error is None
     assert by_url[bad_url].parsed_page is None
     assert by_url[bad_url].error is AsyncCrawlerErrorKind.exception
+
+
+async def test_fetch_retries_transport_errors(monkeypatch):
+    crawler = AsyncCrawler()
+    timeouts: list[float | None] = []
+
+    class _Client:
+        async def get(self, url: str, timeout: float | None = None) -> httpx.Response:
+            timeouts.append(timeout)
+            if len(timeouts) < 3:
+                raise httpx.ReadTimeout("slow response", request=httpx.Request("GET", url))
+            return httpx.Response(200, text="ok", request=httpx.Request("GET", url))
+
+    crawler._client = _Client()  # type: ignore[assignment]
+    monkeypatch.setattr(crawler, "_rate_limit", AsyncMock())
+    monkeypatch.setattr(crawler, "_wait_longer", AsyncMock())
+
+    result = await crawler.fetch("https://example.test/slow", timeout=45)
+
+    assert result.error is None
+    assert result.status_code == 200
+    assert timeouts == [45, 45, 45]
+
+
+async def test_fetch_reports_transport_failures_after_retries(monkeypatch):
+    crawler = AsyncCrawler()
+    calls = 0
+
+    class _Client:
+        async def get(self, url: str, timeout: float | None = None) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("refused", request=httpx.Request("GET", url))
+
+    crawler._client = _Client()  # type: ignore[assignment]
+    monkeypatch.setattr(crawler, "_rate_limit", AsyncMock())
+    monkeypatch.setattr(crawler, "_wait_longer", AsyncMock())
+
+    result = await crawler.fetch("https://example.test/down", attempts=3)
+
+    assert result.error is AsyncCrawlerErrorKind.exception
+    assert calls == 3
+
+
+async def test_crawl_url_uses_the_pdf_timeout(monkeypatch):
+    crawler = AsyncCrawler(pdf_timeout=45)
+    seen: list[float | None] = []
+
+    async def fake_fetch(
+        url: str, attempts: int = 3, timeout: float | None = None
+    ) -> AsyncCrawlerResult:
+        seen.append(timeout)
+        return AsyncCrawlerResult(
+            url=url,
+            status_code=200,
+            response=httpx.Response(
+                200,
+                content=b"%PDF-1.4",
+                request=httpx.Request("GET", url),
+            ),
+            error=None,
+        )
+
+    monkeypatch.setattr(crawler, "fetch", fake_fetch)
+    entry = make_scrapable_url_entry(url="https://www.ird.gov.lk/acts/a.pdf", kind=DocumentKind.pdf)
+
+    result = await crawler.crawl_url(entry)
+
+    assert seen == [45]
+    assert result.pdf_bytes == b"%PDF-1.4"

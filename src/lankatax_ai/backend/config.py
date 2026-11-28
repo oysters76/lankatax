@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Default chunking strategy (structural, semantic, recursive)
     chunk_strategy: str = "structural"
 
+    # Scraping. Discovered links are kept only on this host and its subdomains,
+    # and http is upgraded to https. Set SCRAPE_BASE_HOST for another site.
+    scrape_base_host: str = "ird.gov.lk"
+
     # Logging
     log_level: str = "INFO"
 
@@ -81,7 +85,9 @@ class Settings(BaseSettings):
     hatchet_client_token: SecretStr | None = None
     hatchet_client_tls_strategy: Literal["tls", "none"] | None = None
     hatchet_client_host_port: str | None = None
+    hatchet_client_server_url: str | None = None
     hatchet_dashboard_url: str | None = None
+    hatchet_dashboard_tenant: str | None = None
     hatchet_worker_name: str = "lankatax-worker"
     hatchet_worker_slots: int = Field(2, ge=1, le=100)
 

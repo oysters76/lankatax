@@ -6,6 +6,8 @@ Hatchet or requires a token.
 
 from __future__ import annotations
 
+from typing import Any
+
 from hatchet_sdk import Hatchet
 from hatchet_sdk.config import ClientConfig, ClientTLSConfig
 
@@ -25,23 +27,20 @@ def build_hatchet_client(config: Settings | None = None) -> Hatchet:
     if token is None or not token.get_secret_value().strip():
         raise RuntimeError("HATCHET_CLIENT_TOKEN is required to build the Hatchet client")
 
-    tls_strategy = active.hatchet_client_tls_strategy
-    host_port = active.hatchet_client_host_port
-    token_value = token.get_secret_value()
-    tls_config = ClientTLSConfig(strategy=tls_strategy) if tls_strategy is not None else None
+    # Only pass values that were configured: the SDK otherwise reads the gRPC
+    # and REST addresses from the token, which is right for Hatchet Cloud.
+    overrides: dict[str, Any] = {}
+    if active.hatchet_client_server_url is not None:
+        overrides["server_url"] = active.hatchet_client_server_url
+    if active.hatchet_client_host_port is not None:
+        overrides["host_port"] = active.hatchet_client_host_port
+    if active.hatchet_client_tls_strategy is not None:
+        overrides["tls_config"] = ClientTLSConfig(strategy=active.hatchet_client_tls_strategy)
 
-    if host_port is None:
-        if tls_config is None:
-            client_config = ClientConfig(token=token_value)
-        else:
-            client_config = ClientConfig(token=token_value, tls_config=tls_config)
-    elif tls_config is None:
-        client_config = ClientConfig(token=token_value, host_port=host_port)
-    else:
-        client_config = ClientConfig(
-            token=token_value,
-            host_port=host_port,
-            tls_config=tls_config,
-        )
-
+    # Our Settings already read .env; do not let the SDK read it a second time.
+    client_config = ClientConfig(
+        _env_file=None,  # type: ignore[call-arg]  # pydantic-settings runtime option
+        token=token.get_secret_value(),
+        **overrides,
+    )
     return Hatchet(config=client_config)

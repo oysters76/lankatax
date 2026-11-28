@@ -33,6 +33,7 @@ def _settings(**overrides: Any) -> Settings:
         "hatchet_client_token": SecretStr(TOKEN),
         "hatchet_client_tls_strategy": None,
         "hatchet_client_host_port": None,
+        "hatchet_client_server_url": None,
     }
     return Settings(_env_file=None, **(defaults | overrides))
 
@@ -51,22 +52,32 @@ def test_builds_client_from_settings(monkeypatch):
         _settings(
             hatchet_client_tls_strategy="none",
             hatchet_client_host_port="selfhost:7077",
+            hatchet_client_server_url="http://selfhost:8888",
         )
     )
 
     assert built is captured[0]
     assert built.config.token == TOKEN
     assert built.config.host_port == "selfhost:7077"
+    assert built.config.server_url == "http://selfhost:8888"
     assert built.config.tls_config.strategy == "none"
 
 
-def test_uses_sdk_defaults_when_optional_settings_are_absent(monkeypatch):
+def test_uses_sdk_defaults_when_optional_settings_are_absent(monkeypatch, tmp_path):
+    for name in (
+        "HATCHET_CLIENT_HOST_PORT",
+        "HATCHET_CLIENT_SERVER_URL",
+        "HATCHET_CLIENT_TLS_STRATEGY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(client_module, "Hatchet", _FakeHatchet)
 
     built = client_module.build_hatchet_client(_settings())
 
     assert built.config.token == TOKEN
     assert built.config.host_port == "localhost:7070"
+    assert built.config.server_url == "https://cloud.hatchet.run"
     assert built.config.tls_config.strategy == "tls"
 
 

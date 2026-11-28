@@ -25,10 +25,24 @@ from lankatax_ai.backend.api import create_app
 from lankatax_ai.backend.api.deps import ApiDeps
 from lankatax_ai.backend.api.security import AuthConfig
 from lankatax_ai.backend.cache.types import CacheStats
-from lankatax_ai.backend.config import Settings
+from lankatax_ai.backend.config import Settings, settings
+from lankatax_ai.backend.documents import ScrapeStatusRecord
+from lankatax_ai.backend.ingestion.types import EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.cache import CacheDeps
 from lankatax_ai.backend.services.errors import NotFoundError
+from lankatax_ai.backend.services.ingest import IngestDeps
+from lankatax_ai.backend.services.jobs import (
+    JobDeps,
+    JobDetails,
+    JobFilter,
+    JobReceipt,
+    JobRequest,
+    JobStatus,
+    JobSummary,
+    JobType,
+)
+from lankatax_ai.backend.services.scrape import ScrapeDeps
 from lankatax_ai.backend.services.search import SearchDeps
 from lankatax_ai.backend.services.stats import StatsDeps
 from lankatax_ai.backend.types import SearchMode, SearchSource
@@ -39,6 +53,10 @@ USERNAME = "admin"
 PASSWORD = "secret"
 SECRET = "test-secret-key-for-the-lankatax-api-0123456789"
 TOKEN_URL = "/api/v1/auth/token"
+JOBS_URL = "/api/v1/jobs"
+SCRAPE_URL = "/api/v1/scrape"
+INGEST_URL = "/api/v1/ingest"
+PIPELINE_REFRESH_URL = "/api/v1/pipeline/refresh"
 
 AUTH = AuthConfig(
     username=USERNAME,
@@ -60,18 +78,26 @@ EXPECTED_ACTIONS = {
     "scrape",
     "scrape_urls",
     "scrape_status",
+    "pipeline_refresh",
     "jobs",
     "health",
     "docs",
 }
 
-PROTECTED_STUBS = [
-    ("POST", "/api/v1/ingest"),
-    ("GET", "/api/v1/ingest/status"),
-    ("GET", "/api/v1/scrape/urls"),
-    ("POST", "/api/v1/scrape"),
-    ("GET", "/api/v1/scrape/status"),
-    ("GET", "/api/v1/jobs"),
+#: Job, scrape, ingest and refresh routes; all of them require a bearer token.
+#: They replaced the 501 stubs, so the stub test became this missing-token check.
+PROTECTED_ROUTES = [
+    ("POST", INGEST_URL),
+    ("GET", f"{INGEST_URL}/status"),
+    ("GET", f"{SCRAPE_URL}/urls"),
+    ("POST", SCRAPE_URL),
+    ("GET", f"{SCRAPE_URL}/status"),
+    ("POST", PIPELINE_REFRESH_URL),
+    ("GET", JOBS_URL),
+    ("POST", JOBS_URL),
+    ("GET", f"{JOBS_URL}/run-1"),
+    ("POST", f"{JOBS_URL}/run-1/cancel"),
+    ("POST", f"{JOBS_URL}/run-1/replay"),
 ]
 
 
@@ -183,6 +209,61 @@ class _FakeCacheAdmin:
         return 2
 
 
+class _FakeRegistry:
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+
+    def get_all(self) -> list:
+        return []
+
+
+class _FakeScrapeStore:
+    async def scrape_status(self) -> ScrapeStatusRecord:
+        now = datetime.now(UTC)
+        return ScrapeStatusRecord(total=2, recent=1, first_scrape=now, last_scrape=now)
+
+
+class _FakeIngestRepository:
+    async def status(self) -> IngestionStatus:
+        return IngestionStatus(total_documents=3, pending=1, ingested=2)
+
+
+async def _fake_finalizer(run_id: str | None = None) -> int:
+    return 1
+
+
+class _FakeJobGateway:
+    async def enqueue(self, request: JobRequest) -> JobReceipt:
+        return JobReceipt(run_id="run-1")
+
+    async def list_jobs(self, filters: JobFilter) -> list[JobSummary]:
+        return []
+
+    async def get(self, run_id: str) -> JobDetails:
+        if run_id != "run-1":
+            raise NotFoundError("job not found")
+        return JobDetails(
+            id="run-1",
+            type=JobType.pipeline_refresh,
+            status=JobStatus.succeeded,
+            created_at=datetime.now(UTC),
+            started_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
+            duration_ms=1000,
+            input={"full": True},
+            output={"saved": 1},
+        )
+
+    async def status(self, run_id: str) -> JobStatus:
+        return JobStatus.queued
+
+    async def cancel(self, run_id: str) -> None:
+        return None
+
+    async def replay(self, run_id: str) -> None:
+        return None
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class _Harness:
     deps: ApiDeps
@@ -210,6 +291,18 @@ def _harness(
             no_result_threshold=1.0,
         ),
         cache=CacheDeps(admin_factory=lambda session: _FakeCacheAdmin()),
+        jobs=JobDeps(gateway=_FakeJobGateway()),
+        scrape=ScrapeDeps(
+            registry=_FakeRegistry(),  # type: ignore[arg-type]
+            crawler_factory=lambda: None,  # type: ignore[arg-type,return-value]
+            store_factory=lambda _session: _FakeScrapeStore(),  # type: ignore[arg-type]
+        ),
+        ingest=IngestDeps(
+            repository_factory=lambda _session: _FakeIngestRepository(),  # type: ignore[arg-type]
+            embeddings=_FakeEmbeddings(),
+            embedding_policy=EmbeddingPolicy(),
+            corpus_finalizer=_fake_finalizer,
+        ),
         auth=AUTH,
     )
     return _Harness(deps=deps, analytics=analytics)
@@ -298,16 +391,17 @@ def test_api_root_advertises_every_action(client: TestClient) -> None:
 def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
     links = client.get("/api/v1").json()["links"]
 
+    assert links["ask"]["available"] is False
     for key in (
-        "ask",
         "ingest",
         "ingest_status",
         "scrape",
         "scrape_urls",
         "scrape_status",
+        "pipeline_refresh",
         "jobs",
     ):
-        assert links[key]["available"] is False
+        assert links[key]["available"] is True
     assert links["ask"]["auth_required"] is False
     for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
@@ -384,17 +478,12 @@ def test_open_docs_mode(open_client: TestClient) -> None:
     assert links["docs"]["auth_required"] is False
 
 
-@pytest.mark.parametrize(("method", "path"), PROTECTED_STUBS)
-def test_protected_stubs_need_a_token(client: TestClient, method: str, path: str) -> None:
-    assert client.request(method, path).status_code == 401
+@pytest.mark.parametrize(("method", "path"), PROTECTED_ROUTES)
+def test_protected_routes_need_a_token(client: TestClient, method: str, path: str) -> None:
+    response = client.request(method, path)
 
-    token = _login(client)
-    response = client.request(method, path, headers=_auth(token))
-
-    assert response.status_code == 501
-    body = response.json()
-    assert body["code"] == "not_implemented"
-    assert body["links"]["self"]["available"] is False
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_ask_is_public_and_still_a_stub(client: TestClient) -> None:
@@ -501,3 +590,120 @@ def test_cache_mutations_report_counts(client: TestClient) -> None:
     assert cleared.json()["deleted"] == 7
     assert expired.json()["deleted"] == 2
     assert "cache_stats" in cleared.json()["links"]
+
+
+def test_enqueue_job_returns_location(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.post(
+        JOBS_URL,
+        json={"type": "pipeline.refresh", "params": {"full": True}},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 202
+    assert response.headers["location"].endswith(f"{JOBS_URL}/run-1")
+    assert response.json()["run_id"] == "run-1"
+    assert response.json()["reused"] is False
+
+
+def test_list_jobs_returns_an_empty_page(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.get(JOBS_URL, headers=_auth(token))
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["links"]["self"]["href"].endswith(JOBS_URL)
+
+
+def test_job_detail_maps_not_found(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.get(f"{JOBS_URL}/missing", headers=_auth(token))
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+def test_job_detail_links_to_the_tenant_run(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "hatchet_dashboard_url", "http://localhost:8888")
+    monkeypatch.setattr(settings, "hatchet_dashboard_tenant", "tenant-1")
+    token = _login(client)
+
+    body = client.get(f"{JOBS_URL}/run-1", headers=_auth(token)).json()
+
+    assert body["links"]["dashboard"]["href"] == (
+        "http://localhost:8888/tenants/tenant-1/runs/run-1"
+    )
+
+
+def test_job_detail_omits_the_dashboard_without_a_tenant(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "hatchet_dashboard_url", "http://localhost:8888")
+    monkeypatch.setattr(settings, "hatchet_dashboard_tenant", None)
+    token = _login(client)
+
+    body = client.get(f"{JOBS_URL}/run-1", headers=_auth(token)).json()
+
+    assert "dashboard" not in body["links"]
+
+
+def test_job_cancel_and_replay_return_actions(client: TestClient) -> None:
+    token = _login(client)
+
+    cancelled = client.post(f"{JOBS_URL}/run-1/cancel", headers=_auth(token))
+    replayed = client.post(f"{JOBS_URL}/run-1/replay", headers=_auth(token))
+
+    assert cancelled.status_code == 202
+    assert cancelled.json()["action"] == "cancel"
+    assert replayed.status_code == 202
+    assert replayed.json()["action"] == "replay"
+
+
+def test_scrape_and_pipeline_endpoints_enqueue_jobs(client: TestClient) -> None:
+    token = _login(client)
+
+    scraped = client.post(
+        SCRAPE_URL,
+        json={"full": True, "idempotency_key": "scrape-1"},
+        headers=_auth(token),
+    )
+    refreshed = client.post(
+        PIPELINE_REFRESH_URL,
+        json={"target": "pending", "max_tokens": 1000},
+        headers=_auth(token),
+    )
+
+    assert scraped.status_code == 202
+    assert scraped.headers["location"].endswith(f"{JOBS_URL}/run-1")
+    assert refreshed.status_code == 202
+
+
+def test_ingest_endpoints_enqueue_pending_or_document(client: TestClient) -> None:
+    token = _login(client)
+    document_id = uuid4()
+
+    pending = client.post(INGEST_URL, json={}, headers=_auth(token))
+    document = client.post(
+        INGEST_URL,
+        json={"document_id": str(document_id)},
+        headers=_auth(token),
+    )
+
+    assert pending.status_code == 202
+    assert document.status_code == 202
+
+
+def test_scrape_and_ingest_status_endpoints(client: TestClient) -> None:
+    token = _login(client)
+
+    scrape = client.get(f"{SCRAPE_URL}/status", headers=_auth(token))
+    ingest = client.get(f"{INGEST_URL}/status", headers=_auth(token))
+    urls = client.get(f"{SCRAPE_URL}/urls", headers=_auth(token))
+
+    assert scrape.status_code == 200
+    assert scrape.json()["total"] == 2
+    assert ingest.status_code == 200
+    assert ingest.json()["total_documents"] == 3
+    assert urls.status_code == 200
+    assert urls.json()["items"] == []
