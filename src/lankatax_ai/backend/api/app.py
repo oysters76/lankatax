@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from lankatax_ai.backend.api.deps import ApiDeps, build_api_deps
 from lankatax_ai.backend.api.errors import install_error_handlers
 from lankatax_ai.backend.api.routers import (
+    ask,
     auth,
     cache,
     docs,
@@ -20,7 +21,6 @@ from lankatax_ai.backend.api.routers import (
     scrape,
     search,
     stats,
-    stubs,
 )
 from lankatax_ai.backend.api.security import AuthConfig, require_access
 from lankatax_ai.backend.config import settings
@@ -73,6 +73,7 @@ def create_app(
     install_error_handlers(app)
     app.include_router(root.router)
     app.include_router(auth.router)
+    app.include_router(ask.router)
     app.include_router(search.router)
     app.include_router(stats.router)
     app.include_router(cache.router)
@@ -80,7 +81,6 @@ def create_app(
     app.include_router(scrape.router)
     app.include_router(ingest.router)
     app.include_router(pipeline.router)
-    app.include_router(stubs.router)
     app.include_router(
         docs.router,
         dependencies=[Depends(require_access)] if protected_docs else [],

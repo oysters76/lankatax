@@ -7,6 +7,7 @@ database, network or ``.env`` is involved.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -25,12 +26,16 @@ from lankatax_ai.backend.api import create_app
 from lankatax_ai.backend.api.deps import ApiDeps
 from lankatax_ai.backend.api.security import AuthConfig
 from lankatax_ai.backend.cache.types import CacheStats
+from lankatax_ai.backend.chat import AnswerDraft
 from lankatax_ai.backend.config import Settings, settings
 from lankatax_ai.backend.documents import ScrapeStatusRecord
+from lankatax_ai.backend.guardrails import GuardrailReason, RateLimiter
 from lankatax_ai.backend.ingestion.types import EmbeddingPolicy, IngestionStatus
+from lankatax_ai.backend.memory import InMemoryConversationStore, Turn
 from lankatax_ai.backend.rag.types import RetrievalResult
+from lankatax_ai.backend.services.ask import AskDeps
 from lankatax_ai.backend.services.cache import CacheDeps
-from lankatax_ai.backend.services.errors import NotFoundError
+from lankatax_ai.backend.services.errors import NotFoundError, UpstreamError
 from lankatax_ai.backend.services.ingest import IngestDeps
 from lankatax_ai.backend.services.jobs import (
     JobDeps,
@@ -53,6 +58,7 @@ USERNAME = "admin"
 PASSWORD = "secret"
 SECRET = "test-secret-key-for-the-lankatax-api-0123456789"
 TOKEN_URL = "/api/v1/auth/token"
+ASK_URL = "/api/v1/ask"
 JOBS_URL = "/api/v1/jobs"
 SCRAPE_URL = "/api/v1/scrape"
 INGEST_URL = "/api/v1/ingest"
@@ -87,6 +93,7 @@ EXPECTED_ACTIONS = {
 #: Job, scrape, ingest and refresh routes; all of them require a bearer token.
 #: They replaced the 501 stubs, so the stub test became this missing-token check.
 PROTECTED_ROUTES = [
+    ("POST", ASK_URL),
     ("POST", INGEST_URL),
     ("GET", f"{INGEST_URL}/status"),
     ("GET", f"{SCRAPE_URL}/urls"),
@@ -137,6 +144,35 @@ def _result() -> RetrievalResult:
         },
         embedding=[0.1, 0.2, 0.3],
     )
+
+
+class _FakeAnswerGraph:
+    def __init__(self, state: dict[str, Any] | None = None) -> None:
+        self.state = state or _ask_state()
+        self.calls: list[dict[str, Any]] = []
+
+    async def ainvoke(self, state: Any) -> Any:
+        self.calls.append(dict(state))
+        return {**state, **self.state}
+
+
+class _FailingGraph:
+    async def ainvoke(self, state: Any) -> Any:
+        raise UpstreamError("provider down")
+
+
+def _ask_state(**overrides: Any) -> dict[str, Any]:
+    state = {
+        "question": "How is PAYE withheld?",
+        "answer": "Employers withhold it monthly [1].",
+        "refused": False,
+        "reason": None,
+        "draft": AnswerDraft(answer="Employers withhold it monthly [1].", citation_numbers=[1]),
+        "retrieved": [_result()],
+        "timings": {"answer": 3},
+        "usage": {"llm_calls": 2},
+    }
+    return state | overrides
 
 
 class _FakeEmbeddings:
@@ -274,10 +310,20 @@ def _harness(
     *,
     session_factory: Any = _session_factory,
     retriever_error: Exception | None = None,
+    ask_graph: Any = None,
+    ask_limiter: Any = None,
+    ask_store: Any = None,
 ) -> _Harness:
     analytics = _FakeAnalytics()
+    ask_graph = ask_graph if ask_graph is not None else _FakeAnswerGraph()
+    ask_store = ask_store if ask_store is not None else InMemoryConversationStore()
     deps = ApiDeps(
         session_factory=session_factory,
+        ask=AskDeps(
+            graph_factory=lambda options: ask_graph,
+            conversation_store=ask_store,
+            rate_limiter=ask_limiter or RateLimiter(limit=100),
+        ),
         search=SearchDeps(
             embeddings=_FakeEmbeddings(),
             retriever_factory=lambda session, options: _FakeRetriever(retriever_error),
@@ -391,8 +437,9 @@ def test_api_root_advertises_every_action(client: TestClient) -> None:
 def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
     links = client.get("/api/v1").json()["links"]
 
-    assert links["ask"]["available"] is False
+    assert links["ask"]["available"] is True
     for key in (
+        "ask",
         "ingest",
         "ingest_status",
         "scrape",
@@ -402,8 +449,7 @@ def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
         "jobs",
     ):
         assert links[key]["available"] is True
-    assert links["ask"]["auth_required"] is False
-    for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
+    for key in ("ask", "search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
     assert links["cache_clear"]["method"] == "DELETE"
     assert links["cache_expire"]["method"] == "POST"
@@ -486,12 +532,114 @@ def test_protected_routes_need_a_token(client: TestClient, method: str, path: st
     assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_ask_is_public_and_still_a_stub(client: TestClient) -> None:
-    response = client.post("/api/v1/ask")
+def test_ask_returns_an_answer_with_citations(client: TestClient) -> None:
+    token = _login(client)
 
-    assert response.status_code == 501
-    assert response.json()["code"] == "not_implemented"
-    assert response.json()["links"]["search"]["available"] is True
+    response = client.post(
+        ASK_URL, json={"question": "How is PAYE withheld?"}, headers=_auth(token)
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["refused"] is False
+    assert body["answer"] == "Employers withhold it monthly [1]."
+    assert body["citations"][0]["title"] == "PAYE guide"
+    assert body["citations"][0]["url"] == "https://www.ird.gov.lk/paye"
+    assert body["usage"]["llm_calls"] == 2
+    assert body["usage"]["retrieved_chunks"] == 1
+    assert body["conversation_id"]
+    assert body["links"]["self"]["href"].endswith(ASK_URL)
+    assert body["links"]["search"]["method"] == "POST"
+
+
+def test_ask_refusal_is_a_200_with_a_reason() -> None:
+    graph = _FakeAnswerGraph(
+        _ask_state(
+            answer="I can only answer questions about Sri Lankan taxation.",
+            refused=True,
+            reason=GuardrailReason.off_topic,
+            draft=None,
+            retrieved=[],
+        )
+    )
+    harness = _harness(ask_graph=graph)
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+    token = _login(client)
+
+    response = client.post(ASK_URL, json={"question": "Weather?"}, headers=_auth(token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["refused"] is True
+    assert body["reason"] == "off_topic"
+    assert body["citations"] == []
+
+
+def test_ask_rejects_a_blank_question(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.post(ASK_URL, json={"question": "   "}, headers=_auth(token))
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+def test_ask_rate_limit_returns_retry_after() -> None:
+    harness = _harness(ask_limiter=RateLimiter(limit=1))
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+    token = _login(client)
+
+    first = client.post(ASK_URL, json={"question": "first"}, headers=_auth(token))
+    second = client.post(ASK_URL, json={"question": "second"}, headers=_auth(token))
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == "rate_limited"
+    assert int(second.headers["retry-after"]) >= 1
+
+
+def test_ask_maps_upstream_failures_to_502() -> None:
+    harness = _harness(ask_graph=_FailingGraph())
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+    token = _login(client)
+
+    response = client.post(ASK_URL, json={"question": "PAYE?"}, headers=_auth(token))
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "upstream_error"
+
+
+def test_ask_continues_an_existing_conversation() -> None:
+    store = InMemoryConversationStore()
+    conversation_id = asyncio.run(store.create(fingerprint=USERNAME))
+    asyncio.run(store.append(conversation_id, [Turn(role="user", content="prior turn")]))
+    graph = _FakeAnswerGraph()
+    harness = _harness(ask_store=store, ask_graph=graph)
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+    token = _login(client)
+
+    response = client.post(
+        ASK_URL,
+        json={"question": "follow-up", "conversation_id": conversation_id},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["conversation_id"] == conversation_id
+    assert [turn.content for turn in graph.calls[0]["history"]] == ["prior turn"]
+
+
+def test_ask_unknown_conversation_is_not_found(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.post(
+        ASK_URL,
+        json={"question": "PAYE?", "conversation_id": "not-a-uuid"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 def test_search_returns_hypermedia_without_embeddings(
@@ -551,7 +699,9 @@ def test_unknown_route_uses_the_envelope(client: TestClient) -> None:
     assert "api_root" in response.json()["links"]
 
 
-def test_auth_config_reports_every_missing_value() -> None:
+def test_auth_config_reports_every_missing_value(monkeypatch) -> None:
+    for name in ("API_AUTH_PASSWORD_HASH", "API_AUTH_SECRET", "API_KEY_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None, api_auth_username=USERNAME)
 
     with pytest.raises(RuntimeError, match="API_AUTH_PASSWORD_HASH"):

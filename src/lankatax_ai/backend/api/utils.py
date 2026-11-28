@@ -1,8 +1,7 @@
-"""FastAPI-specific helpers: link building, service mappers, stub replies.
+"""FastAPI-specific helpers: link building and service mappers.
 
-Routing policy lives here too: the two route-name sets below decide whether a
-link advertises ``auth_required`` and ``available``, so a route is described in
-exactly one place.
+Routing policy lives here too: the route-name set below decides whether a link
+advertises ``auth_required``, so a route is described in exactly one place.
 """
 
 from __future__ import annotations
@@ -30,20 +29,15 @@ from lankatax_ai.backend.types import SearchSource
 __all__ = [
     "DOCS_ROUTES",
     "PUBLIC_ROUTES",
-    "STUB_ROUTES",
     "error_payload",
     "job_receipt_response",
     "link",
-    "not_implemented",
     "to_search_options",
     "to_search_response",
 ]
 
 #: Routes that do not need a bearer token.
-PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token", "ask"})
-
-#: Declared routes that still answer 501.
-STUB_ROUTES: frozenset[str] = frozenset({"ask"})
+PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token"})
 
 #: Documentation routes, guarded by their own setting.
 DOCS_ROUTES: frozenset[str] = frozenset({"swagger_ui_html", "redoc_html", "openapi"})
@@ -66,7 +60,6 @@ def link(
         href=href,
         method=method,
         title=title,
-        available=name not in STUB_ROUTES,
         auth_required=auth_required,
     )
 
@@ -97,20 +90,6 @@ def error_payload(
     if code == "unauthorized":
         links["token"] = link(request, "token", method="POST")
     return ErrorBody(code=code, detail=detail, errors=errors, links=links)
-
-
-def not_implemented(
-    request: Request, *, name: str, phase: str, method: str = "GET", **related: str
-) -> JSONResponse:
-    """Answer a declared-but-unimplemented action without pretending it works."""
-    links = {"self": link(request, name, method=method), "api_root": link(request, "api_root")}
-    links.update({key: link(request, route) for key, route in related.items()})
-    body = ErrorBody(
-        code="not_implemented",
-        detail=f"Not implemented yet; arrives in {phase}",
-        links=links,
-    )
-    return JSONResponse(status_code=501, content=body.model_dump(mode="json"))
 
 
 def to_search_options(payload: SearchRequest) -> SearchOptions:

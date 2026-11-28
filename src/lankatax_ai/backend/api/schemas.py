@@ -14,13 +14,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.services.jobs import JobStatus, JobType, JsonObject
 from lankatax_ai.backend.services.search import limits
 from lankatax_ai.backend.types import LlmProvider, QueryType, SearchMode
 
 __all__ = [
     "ApiRoot",
+    "AskRequestSchema",
+    "AskResponse",
+    "AskUsageSchema",
     "CacheResponse",
+    "CitationSchema",
     "CountResponse",
     "ErrorBody",
     "Health",
@@ -286,3 +291,33 @@ class RegistryEntrySchema(Hypermedia):
 
 class RegistrySchema(Hypermedia):
     items: list[RegistryEntrySchema]
+
+
+class AskRequestSchema(BaseModel):
+    question: str = Field(min_length=1, max_length=settings.ask_max_question_chars)
+    conversation_id: str | None = Field(None, max_length=64)
+
+
+class CitationSchema(BaseModel):
+    chunk_id: str
+    document_id: str
+    title: str
+    url: str | None = None
+    snippet: str
+    score: float
+
+
+class AskUsageSchema(BaseModel):
+    llm_calls: int
+    answer_chars: int
+    retrieved_chunks: int
+
+
+class AskResponse(Hypermedia):
+    conversation_id: str
+    answer: str
+    refused: bool
+    reason: str | None = None
+    citations: list[CitationSchema] = Field(default_factory=list)
+    usage: AskUsageSchema
+    timings: dict[str, int] = Field(default_factory=dict)

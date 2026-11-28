@@ -16,13 +16,14 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from lankatax_ai.backend.api.utils import error_payload
-from lankatax_ai.backend.services.errors import ServiceError
+from lankatax_ai.backend.services.errors import RateLimitError, ServiceError
 
 __all__ = ["ApiError", "install_error_handlers"]
 
 STATUS_BY_SERVICE_CODE: dict[str, int] = {
     "validation_error": 422,
     "not_found": 404,
+    "rate_limited": 429,
     "upstream_error": 502,
 }
 
@@ -68,11 +69,15 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ServiceError)
     async def _service_error(request: Request, exc: ServiceError) -> JSONResponse:
+        headers = None
+        if isinstance(exc, RateLimitError) and exc.retry_after is not None:
+            headers = {"Retry-After": str(exc.retry_after)}
         return _response(
             request,
             status_code=STATUS_BY_SERVICE_CODE.get(exc.code, 500),
             code=exc.code,
             detail=str(exc),
+            headers=headers,
         )
 
     @app.exception_handler(RequestValidationError)
