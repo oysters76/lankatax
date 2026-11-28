@@ -5,12 +5,14 @@ from __future__ import annotations
 from hatchet_sdk import Hatchet
 from hatchet_sdk.context.context import Context
 from hatchet_sdk.runnables.workflow import Workflow
+from hatchet_sdk.types.idempotency import StatusBasedIdempotencyConfig
 
 from lankatax_ai.backend.jobs.contracts import ScrapeInput, ScrapeOutput
 from lankatax_ai.backend.jobs.deps import JobRuntime
 from lankatax_ai.backend.jobs.policies import (
     SCHEDULE_TIMEOUT,
     SCRAPE_EXECUTION_TIMEOUT,
+    SCRAPE_IDEMPOTENCY_TTL,
     SCRAPE_RETRIES,
 )
 from lankatax_ai.backend.jobs.tasks.scrape import run_scrape
@@ -24,6 +26,10 @@ def build_scrape_workflow(hatchet: Hatchet, runtime: JobRuntime) -> Workflow[Scr
     workflow = hatchet.workflow(
         name=JobType.scrape_registry.value,
         input_validator=ScrapeInput,
+        idempotency=StatusBasedIdempotencyConfig(
+            key_expression="input.idempotency_key",
+            fallback_ttl=SCRAPE_IDEMPOTENCY_TTL,
+        ),
     )
 
     @workflow.task(

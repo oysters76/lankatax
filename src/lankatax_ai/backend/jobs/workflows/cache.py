@@ -10,6 +10,7 @@ from lankatax_ai.backend.jobs.contracts import CacheExpireInput, CacheOutput
 from lankatax_ai.backend.jobs.deps import JobRuntime
 from lankatax_ai.backend.jobs.policies import (
     CACHE_EXECUTION_TIMEOUT,
+    CACHE_EXPIRE_CRON,
     CACHE_RETRIES,
     SCHEDULE_TIMEOUT,
 )
@@ -26,6 +27,8 @@ def build_cache_expire_workflow(
     workflow = hatchet.workflow(
         name=JobType.cache_expire.value,
         input_validator=CacheExpireInput,
+        on_crons=[CACHE_EXPIRE_CRON],
+        cron_input=CacheExpireInput(),
     )
 
     @workflow.task(

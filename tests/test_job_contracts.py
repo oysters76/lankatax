@@ -14,10 +14,16 @@ pytestmark = pytest.mark.unit
 def test_ingest_input_defaults():
     payload = contracts.IngestInput()
 
+    assert payload.idempotency_key == "ingest-pending"
     assert payload.target == "pending"
     assert payload.max_documents is None
     assert payload.max_tokens is None
     assert payload.batch_size == 25
+
+
+def test_scrape_and_refresh_default_idempotency_keys():
+    assert contracts.ScrapeInput().idempotency_key == "scrape-registry"
+    assert contracts.RefreshInput().idempotency_key == "pipeline-refresh"
 
 
 @pytest.mark.parametrize(
@@ -88,3 +94,6 @@ def test_policies_are_derived_from_settings():
     assert policies.SCRAPE_EXECUTION_TIMEOUT == timedelta(seconds=1800)
     assert policies.INGEST_EXECUTION_TIMEOUT == timedelta(seconds=7200)
     assert policies.SCHEDULE_TIMEOUT == timedelta(seconds=3600)
+    assert policies.REFRESH_IDEMPOTENCY_TTL == timedelta(hours=6)
+    assert policies.SCRAPE_IDEMPOTENCY_TTL == timedelta(hours=2)
+    assert policies.INGEST_IDEMPOTENCY_TTL == timedelta(hours=6)

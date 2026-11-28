@@ -19,3 +19,7 @@ SCHEDULE_TIMEOUT = timedelta(seconds=settings.job_schedule_timeout_seconds)
 
 REFRESH_CRON = settings.job_refresh_cron
 CACHE_EXPIRE_CRON = settings.job_cache_expire_cron
+
+REFRESH_IDEMPOTENCY_TTL = timedelta(hours=6)
+SCRAPE_IDEMPOTENCY_TTL = timedelta(hours=2)
+INGEST_IDEMPOTENCY_TTL = timedelta(hours=6)

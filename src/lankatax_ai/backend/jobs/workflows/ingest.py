@@ -5,6 +5,7 @@ from __future__ import annotations
 from hatchet_sdk import Hatchet
 from hatchet_sdk.context.context import Context
 from hatchet_sdk.runnables.workflow import Workflow
+from hatchet_sdk.types.idempotency import StatusBasedIdempotencyConfig
 
 from lankatax_ai.backend.jobs.contracts import (
     IngestDocumentInput,
@@ -14,6 +15,7 @@ from lankatax_ai.backend.jobs.contracts import (
 from lankatax_ai.backend.jobs.deps import JobRuntime
 from lankatax_ai.backend.jobs.policies import (
     INGEST_EXECUTION_TIMEOUT,
+    INGEST_IDEMPOTENCY_TTL,
     INGEST_RETRIES,
     SCHEDULE_TIMEOUT,
 )
@@ -30,6 +32,10 @@ def build_ingest_pending_workflow(
     workflow = hatchet.workflow(
         name=JobType.ingest_pending.value,
         input_validator=IngestInput,
+        idempotency=StatusBasedIdempotencyConfig(
+            key_expression="input.idempotency_key",
+            fallback_ttl=INGEST_IDEMPOTENCY_TTL,
+        ),
     )
 
     @workflow.task(

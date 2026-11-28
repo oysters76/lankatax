@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,22 +20,24 @@ __all__ = [
 
 
 class ScrapeInput(BaseModel):
+    idempotency_key: str = "scrape-registry"
     full: bool = False
     discover_pdfs: bool = True
-    batch_size: int = Field(25, ge=1, le=100)
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
 
 
 class IngestInput(BaseModel):
+    idempotency_key: str = "ingest-pending"
     target: Literal["pending", "all"] = "pending"
-    max_documents: int | None = Field(None, ge=1)
-    max_tokens: int | None = Field(None, ge=1)
-    batch_size: int = Field(25, ge=1, le=100)
+    max_documents: Annotated[int | None, Field(ge=1)] = None
+    max_tokens: Annotated[int | None, Field(ge=1)] = None
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
 
 
 class IngestDocumentInput(BaseModel):
     document_id: UUID
-    max_tokens: int | None = Field(None, ge=1)
-    batch_size: int = Field(25, ge=1, le=100)
+    max_tokens: Annotated[int | None, Field(ge=1)] = None
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
 
 
 class CacheExpireInput(BaseModel):
@@ -43,12 +45,13 @@ class CacheExpireInput(BaseModel):
 
 
 class RefreshInput(BaseModel):
+    idempotency_key: str = "pipeline-refresh"
     full: bool = False
     discover_pdfs: bool = True
     target: Literal["pending", "all"] = "pending"
-    max_documents: int | None = Field(None, ge=1)
-    max_tokens: int | None = Field(None, ge=1)
-    batch_size: int = Field(25, ge=1, le=100)
+    max_documents: Annotated[int | None, Field(ge=1)] = None
+    max_tokens: Annotated[int | None, Field(ge=1)] = None
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
 
 
 class ScrapeOutput(BaseModel):
