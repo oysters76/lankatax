@@ -9,6 +9,8 @@ from lankatax_ai.backend.utils import fuzzy_match
 
 
 class QueryPreprocessor:
+    _PUNCTUATION = ".,;:!?()[]{}'\"`"
+
     def __init__(self, fuzzy_threshold: float = 0.75) -> None:
         data_dir = importlib.resources.files("lankatax_ai.backend.rag.data")
         self._acronyms: dict[str, str] = json.loads((data_dir / "tax_acronyms.json").read_text())
@@ -30,37 +32,48 @@ class QueryPreprocessor:
         )
 
     def _expand_acronyms(self, query: str) -> str:
-        tokens = query.split()
         expanded = []
-        for token in tokens:
-            clean = token.upper()
-            if clean in self._acronyms:
-                expanded.append(f"{token} {self._acronyms[clean]}")
-            elif clean.isupper() and len(clean) >= 3:
-                match = fuzzy_match(
-                    clean, list(self._acronyms.keys()), cutoff=self._fuzzy_threshold
-                )
-                if match:
-                    expanded.append(f"{match} {self._acronyms[match]}")
-                else:
-                    expanded.append(token)
-            else:
+        for token in query.split():
+            stripped = token.strip(self._PUNCTUATION)
+            clean = stripped.upper()
+            # Only uppercase tokens can be acronyms: lowercase words such as
+            # "it" collide with IT (Income Tax) and must not be expanded.
+            if not stripped or not stripped.isupper() or len(clean) < 3:
                 expanded.append(token)
+                continue
+
+            key = clean if clean in self._acronyms else None
+            if key is None:
+                key = fuzzy_match(clean, list(self._acronyms.keys()), cutoff=self._fuzzy_threshold)
+            if key is None:
+                expanded.append(token)
+            else:
+                expanded.append(self._insert(token, stripped, f"{key} {self._acronyms[key]}"))
         return " ".join(expanded)
+
+    @staticmethod
+    def _insert(token: str, stripped: str, replacement: str) -> str:
+        """Put a replacement where the token's word is, keeping punctuation."""
+        start = token.find(stripped)
+        if start < 0:
+            return f"{token} {replacement}"
+        return f"{token[:start]}{replacement}{token[start + len(stripped) :]}"
 
     def _correct_spelling(self, query: str) -> str:
         tokens = query.split()
         corrected = []
         for token in tokens:
-            token_lower = token.lower()
-            if token.upper() in self._acronyms or token_lower in self._term_words:
+            stripped = token.strip(self._PUNCTUATION)
+            lower = stripped.lower()
+            if (
+                not stripped.isalpha()
+                or stripped.upper() in self._acronyms
+                or lower in self._term_words
+            ):
                 corrected.append(token)
-            else:
-                match = fuzzy_match(token_lower, list(self._term_words), cutoff=0.7)
-                if match:
-                    corrected.append(match)
-                else:
-                    corrected.append(token)
+                continue
+            match = fuzzy_match(lower, list(self._term_words), cutoff=0.9)
+            corrected.append(match if match else token)
         return " ".join(corrected)
 
     def _classify(self, query: str) -> QueryType:
