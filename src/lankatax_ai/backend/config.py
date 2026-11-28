@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     # and tests keep working without Hatchet; job wiring validates it later.
     hatchet_client_token: SecretStr | None = None
     hatchet_client_tls_strategy: Literal["tls", "none"] | None = None
+    hatchet_client_host_port: str | None = None
     hatchet_dashboard_url: str | None = None
     hatchet_worker_name: str = "lankatax-worker"
     hatchet_worker_slots: int = Field(2, ge=1, le=100)

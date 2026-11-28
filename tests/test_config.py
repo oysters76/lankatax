@@ -18,6 +18,7 @@ LANGSMITH_VARS = (
 HATCHET_VARS = (
     "HATCHET_CLIENT_TOKEN",
     "HATCHET_CLIENT_TLS_STRATEGY",
+    "HATCHET_CLIENT_HOST_PORT",
     "HATCHET_DASHBOARD_URL",
     "HATCHET_WORKER_NAME",
     "HATCHET_WORKER_SLOTS",
@@ -121,6 +122,7 @@ def test_hatchet_settings_are_read(monkeypatch):
     _clear_hatchet_and_jobs(monkeypatch)
     monkeypatch.setenv("HATCHET_CLIENT_TOKEN", "hatchet-token")
     monkeypatch.setenv("HATCHET_CLIENT_TLS_STRATEGY", "none")
+    monkeypatch.setenv("HATCHET_CLIENT_HOST_PORT", "localhost:7070")
     monkeypatch.setenv("HATCHET_DASHBOARD_URL", "https://cloud.hatchet.run")
     monkeypatch.setenv("HATCHET_WORKER_NAME", "lankatax-pipeline")
     monkeypatch.setenv("HATCHET_WORKER_SLOTS", "3")
@@ -130,6 +132,7 @@ def test_hatchet_settings_are_read(monkeypatch):
     assert settings.hatchet_client_token is not None
     assert settings.hatchet_client_token.get_secret_value() == "hatchet-token"
     assert settings.hatchet_client_tls_strategy == "none"
+    assert settings.hatchet_client_host_port == "localhost:7070"
     assert settings.hatchet_dashboard_url == "https://cloud.hatchet.run"
     assert settings.hatchet_worker_name == "lankatax-pipeline"
     assert settings.hatchet_worker_slots == 3
@@ -142,6 +145,7 @@ def test_job_policy_defaults(monkeypatch):
 
     assert settings.hatchet_client_token is None
     assert settings.hatchet_client_tls_strategy is None
+    assert settings.hatchet_client_host_port is None
     assert settings.hatchet_worker_name == "lankatax-worker"
     assert settings.hatchet_worker_slots == 2
     assert settings.job_refresh_cron == "0 2 * * *"
