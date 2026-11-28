@@ -8,10 +8,11 @@ falling back to a safe refusal.
 from __future__ import annotations
 
 import logging
-import re
 
 from langchain_core.language_models import BaseChatModel
 
+from lankatax_ai.backend.guardrails import limits
+from lankatax_ai.backend.guardrails.constants import CITATION_RE, DANGEROUS_HTML_RE
 from lankatax_ai.backend.guardrails.input_validator import redact_pii
 from lankatax_ai.backend.guardrails.types import (
     GroundingCheck,
@@ -24,10 +25,6 @@ from lankatax_ai.backend.rag.prompts import get_prompt
 __all__ = ["OutputChecker"]
 
 logger = logging.getLogger(__name__)
-
-_CITATION_RE = re.compile(r"\[(\d+)\]")
-_DANGEROUS_HTML_RE = re.compile(r"<\s*(script|iframe|object|embed|style)\b", re.IGNORECASE)
-MAX_ANSWER_CHARS = 8000
 
 
 class OutputChecker:
@@ -54,14 +51,14 @@ class OutputChecker:
         if not sanitized:
             return OutputGuardResult(OutputVerdict.refuse, GuardrailReason.empty)
 
-        if len(sanitized) > MAX_ANSWER_CHARS:
+        if len(sanitized) > limits.MAX_ANSWER_CHARS:
             return OutputGuardResult(
                 OutputVerdict.refuse,
                 GuardrailReason.too_long,
-                detail=f"answer over {MAX_ANSWER_CHARS} characters",
+                detail=f"answer over {limits.MAX_ANSWER_CHARS} characters",
             )
 
-        if _DANGEROUS_HTML_RE.search(sanitized):
+        if DANGEROUS_HTML_RE.search(sanitized):
             return OutputGuardResult(
                 OutputVerdict.refuse,
                 GuardrailReason.unsafe,
@@ -70,7 +67,7 @@ class OutputChecker:
 
         invalid = [
             number
-            for number in (int(match) for match in _CITATION_RE.findall(sanitized))
+            for number in (int(match) for match in CITATION_RE.findall(sanitized))
             if number < 1 or number > citation_count
         ]
         if invalid:

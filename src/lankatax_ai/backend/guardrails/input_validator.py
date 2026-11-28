@@ -9,10 +9,15 @@ provider outage does not block every question.
 from __future__ import annotations
 
 import logging
-import re
 
 from langchain_core.language_models import BaseChatModel
 
+from lankatax_ai.backend.guardrails import limits
+from lankatax_ai.backend.guardrails.constants import (
+    CATEGORY_REASONS,
+    INJECTION_PATTERNS,
+    PII_PATTERNS,
+)
 from lankatax_ai.backend.guardrails.types import (
     GuardClassification,
     GuardrailReason,
@@ -21,40 +26,14 @@ from lankatax_ai.backend.guardrails.types import (
 )
 from lankatax_ai.backend.rag.prompts import get_prompt
 
-__all__ = ["InputValidator"]
+__all__ = ["InputValidator", "redact_pii"]
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MAX_CHARS = 2000
-
-_INJECTION_PATTERNS = (
-    re.compile(r"ignore\s+(all\s+|any\s+)?(previous|prior|above)\s+instructions", re.IGNORECASE),
-    re.compile(
-        r"disregard\s+(the\s+)?(system|previous|above)\s+(prompt|instructions)", re.IGNORECASE
-    ),
-    re.compile(r"reveal\s+(your\s+)?(system\s+prompt|hidden\s+instructions)", re.IGNORECASE),
-    re.compile(r"you\s+are\s+now\s+(a|an|the)\s+", re.IGNORECASE),
-    re.compile(r"pretend\s+(to\s+be|you\s+are)\s+", re.IGNORECASE),
-)
-
-_PII_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\b\d{9}[vVxX]\b"), "[redacted-nic]"),
-    (re.compile(r"\b\d{12}\b"), "[redacted-nic]"),
-    (re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b"), "[redacted-email]"),
-    (re.compile(r"\b(?:\+94|0)\d{9}\b"), "[redacted-phone]"),
-)
-
-_CATEGORY_REASONS = {
-    "off_topic": GuardrailReason.off_topic,
-    "injection": GuardrailReason.injection,
-    "unsafe": GuardrailReason.unsafe,
-    "pii": GuardrailReason.pii,
-}
 
 
 def redact_pii(text: str) -> str:
     """Mask common Sri Lankan identifiers before text is logged, stored or sent."""
-    for pattern, replacement in _PII_PATTERNS:
+    for pattern, replacement in PII_PATTERNS:
         text = pattern.sub(replacement, text)
     return text
 
@@ -66,7 +45,7 @@ class InputValidator:
         self,
         *,
         llm: BaseChatModel | None = None,
-        max_chars: int = DEFAULT_MAX_CHARS,
+        max_chars: int = limits.DEFAULT_MAX_QUESTION_CHARS,
         prompt_version: str | None = None,
     ) -> None:
         self._max_chars = max_chars
@@ -86,7 +65,7 @@ class InputValidator:
                 question=cleaned,
                 detail=f"over {self._max_chars} characters",
             )
-        for pattern in _INJECTION_PATTERNS:
+        for pattern in INJECTION_PATTERNS:
             if pattern.search(cleaned):
                 return InputGuardResult(
                     InputVerdict.refuse,
@@ -109,7 +88,7 @@ class InputValidator:
         if not classification.allowed:
             return InputGuardResult(
                 InputVerdict.refuse,
-                _CATEGORY_REASONS.get(classification.category, GuardrailReason.off_topic),
+                CATEGORY_REASONS.get(classification.category, GuardrailReason.off_topic),
                 question=cleaned,
                 detail=classification.reason,
             )

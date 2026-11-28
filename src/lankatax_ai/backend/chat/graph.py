@@ -6,41 +6,14 @@ the service persists the result. That keeps LangGraph out of storage concerns.
 
 from __future__ import annotations
 
-import dataclasses
-
-from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from lankatax_ai.backend.chat.nodes import AskNodes, SearchRunner
-from lankatax_ai.backend.chat.state import AskState
-from lankatax_ai.backend.guardrails.input_validator import InputValidator
-from lankatax_ai.backend.guardrails.output_checker import OutputChecker
+from lankatax_ai.backend.chat.nodes import AskNodes
+from lankatax_ai.backend.chat.types import AskState, GraphDeps
 from lankatax_ai.backend.guardrails.types import OutputVerdict
 
-__all__ = ["GraphConfig", "GraphDeps", "build_ask_graph"]
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class GraphConfig:
-    """Guardrail and prompt choices for one graph build."""
-
-    min_score: float = 0.2
-    guard_input: bool = True
-    guard_output: bool = True
-    answer_prompt_version: str | None = None
-    condense_prompt_version: str | None = None
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class GraphDeps:
-    """Everything the graph needs; built by the ask use case wiring."""
-
-    llm: BaseChatModel
-    search: SearchRunner
-    config: GraphConfig = dataclasses.field(default_factory=GraphConfig)
-    input_validator: InputValidator | None = None
-    output_checker: OutputChecker | None = None
+__all__ = ["build_ask_graph"]
 
 
 def _after_input(state: AskState) -> str:

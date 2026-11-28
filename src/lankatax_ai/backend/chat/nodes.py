@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
 
 from langchain_core.language_models import BaseChatModel
 
+from lankatax_ai.backend.chat.constants import (
+    DEFAULT_REFUSAL,
+    HISTORY_CHAR_LIMIT,
+    REFUSAL_MESSAGES,
+    STRICT_SUFFIX,
+)
 from lankatax_ai.backend.chat.schemas import AnswerDraft, CondensedQuestion
-from lankatax_ai.backend.chat.state import AskState
+from lankatax_ai.backend.chat.types import AskState, SearchRunner
 from lankatax_ai.backend.guardrails.input_validator import InputValidator
 from lankatax_ai.backend.guardrails.output_checker import OutputChecker
 from lankatax_ai.backend.guardrails.types import (
@@ -21,43 +26,13 @@ from lankatax_ai.backend.guardrails.types import (
 )
 from lankatax_ai.backend.memory.types import Turn
 from lankatax_ai.backend.rag.prompts import get_prompt
-from lankatax_ai.backend.services.search.types import SearchOutcome
 
-__all__ = ["AskNodes", "SearchRunner"]
+__all__ = ["AskNodes"]
 
 logger = logging.getLogger(__name__)
 
-SearchRunner = Callable[[str], Awaitable[SearchOutcome]]
 
-_REFUSALS = {
-    GuardrailReason.off_topic: (
-        "I can only answer questions about Sri Lankan taxation and IRD procedures."
-    ),
-    GuardrailReason.injection: "I can't help with that request.",
-    GuardrailReason.unsafe: "I can't help with that request.",
-    GuardrailReason.pii: "Please remove personal identifiers and ask again.",
-    GuardrailReason.empty: "Please ask a question about Sri Lankan tax.",
-    GuardrailReason.too_long: "That question is too long. Please shorten it and try again.",
-    GuardrailReason.insufficient_context: (
-        "I couldn't find enough in the Sri Lankan tax documents to answer that. "
-        "Try rephrasing, or ask about a specific tax type such as PAYE, VAT or income tax."
-    ),
-    GuardrailReason.ungrounded: (
-        "I couldn't produce an answer that is fully supported by the available "
-        "documents. Try a more specific question."
-    ),
-    GuardrailReason.rate_limited: "You're asking too quickly. Please wait a moment.",
-}
-
-_DEFAULT_REFUSAL = "I can't answer that from the available tax documents."
-
-_STRICT_SUFFIX = (
-    "\n\nOnly state facts that appear in the retrieved context and cite each one. "
-    "If the context does not support an answer, say the documents do not cover it."
-)
-
-
-def _history_text(history: list[Turn], limit_chars: int = 4000) -> str:
+def _history_text(history: list[Turn], limit_chars: int = HISTORY_CHAR_LIMIT) -> str:
     text = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
     return text[-limit_chars:]
 
@@ -191,7 +166,7 @@ class AskNodes:
         started = time.perf_counter()
         question = state.get("question") or state["question"]
         if strict:
-            question = f"{question}{_STRICT_SUFFIX}"
+            question = f"{question}{STRICT_SUFFIX}"
 
         messages = self._answer_prompt.format_messages(
             question=question,
@@ -250,7 +225,7 @@ class AskNodes:
         started = time.perf_counter()
         reason = state.get("reason")
         return {
-            "answer": _REFUSALS.get(reason, _DEFAULT_REFUSAL) if reason else _DEFAULT_REFUSAL,
+            "answer": REFUSAL_MESSAGES.get(reason, DEFAULT_REFUSAL) if reason else DEFAULT_REFUSAL,
             "refused": True,
             "reason": reason,
             "timings": _timings(state, "refuse", started),

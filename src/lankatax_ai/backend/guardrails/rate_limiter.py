@@ -12,12 +12,10 @@ import time
 from collections import defaultdict, deque
 from collections.abc import Callable
 
+from lankatax_ai.backend.guardrails import limits
 from lankatax_ai.backend.services.errors import RateLimitError
 
 __all__ = ["RateLimiter"]
-
-DEFAULT_LIMIT = 20
-DEFAULT_WINDOW_SECONDS = 60.0
 
 
 class RateLimiter:
@@ -25,8 +23,8 @@ class RateLimiter:
 
     def __init__(
         self,
-        limit: int = DEFAULT_LIMIT,
-        window_seconds: float = DEFAULT_WINDOW_SECONDS,
+        limit: int = limits.DEFAULT_RATE_LIMIT,
+        window_seconds: float = limits.DEFAULT_RATE_WINDOW_SECONDS,
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
