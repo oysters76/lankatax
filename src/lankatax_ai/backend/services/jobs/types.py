@@ -14,6 +14,7 @@ from lankatax_ai.backend.services.utils import require_range
 __all__ = [
     "JobDetails",
     "JobFilter",
+    "JobReceipt",
     "JobRequest",
     "JobStatus",
     "JobSummary",
@@ -56,6 +57,17 @@ class JobRequest:
     def __post_init__(self) -> None:
         if self.idempotency_key is not None and not self.idempotency_key.strip():
             raise ValidationError("idempotency_key must not be blank")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class JobReceipt:
+    """The run accepted for an enqueue request.
+
+    ``reused`` is true when an idempotency key matched an existing run.
+    """
+
+    run_id: str
+    reused: bool = False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

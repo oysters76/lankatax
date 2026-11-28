@@ -11,6 +11,7 @@ from typing import Protocol
 from lankatax_ai.backend.services.jobs.types import (
     JobDetails,
     JobFilter,
+    JobReceipt,
     JobRequest,
     JobStatus,
     JobSummary,
@@ -22,9 +23,9 @@ __all__ = ["JobGateway"]
 class JobGateway(Protocol):
     """Execution backend used by the job service."""
 
-    async def enqueue(self, request: JobRequest) -> str: ...
+    async def enqueue(self, request: JobRequest) -> JobReceipt: ...
 
-    async def list(self, filters: JobFilter) -> list[JobSummary]: ...
+    async def list_jobs(self, filters: JobFilter) -> list[JobSummary]: ...
 
     async def get(self, run_id: str) -> JobDetails: ...
 
