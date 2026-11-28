@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lankatax_ai.backend.guardrails.input_validator import InputValidator, redact_pii
 from lankatax_ai.backend.guardrails.output_checker import OutputChecker
-from lankatax_ai.backend.guardrails.rate_limiter import RateLimiter
+from lankatax_ai.backend.guardrails.rate_limiter import QuotaLimiter, RateLimiter
 from lankatax_ai.backend.guardrails.types import (
     GroundingCheck,
     GuardClassification,
@@ -13,6 +13,7 @@ from lankatax_ai.backend.guardrails.types import (
     InputVerdict,
     OutputGuardResult,
     OutputVerdict,
+    RateLimitRule,
 )
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     "OutputChecker",
     "OutputGuardResult",
     "OutputVerdict",
+    "QuotaLimiter",
+    "RateLimitRule",
     "RateLimiter",
     "redact_pii",
 ]

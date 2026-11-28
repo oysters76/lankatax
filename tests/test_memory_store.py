@@ -23,15 +23,19 @@ async def test_in_memory_round_trip_and_window():
             Turn(role="user", content="q2"),
             Turn(role="assistant", content="a2"),
         ],
+        owner="test",
     )
 
-    assert [turn.content for turn in await store.load(conversation_id, limit=10)] == [
+    assert [turn.content for turn in await store.load(conversation_id, limit=10, owner="test")] == [
         "q1",
         "a1",
         "q2",
         "a2",
     ]
-    assert [turn.content for turn in await store.load(conversation_id, limit=2)] == ["q2", "a2"]
+    assert [turn.content for turn in await store.load(conversation_id, limit=2, owner="test")] == [
+        "q2",
+        "a2",
+    ]
 
 
 async def test_conversations_are_isolated():
@@ -39,11 +43,27 @@ async def test_conversations_are_isolated():
     first = await store.create(fingerprint="a")
     second = await store.create(fingerprint="b")
 
-    await store.append(first, [Turn(role="user", content="first")])
-    await store.append(second, [Turn(role="user", content="second")])
+    await store.append(first, [Turn(role="user", content="first")], owner="a")
+    await store.append(second, [Turn(role="user", content="second")], owner="b")
 
-    assert [turn.content for turn in await store.load(first, limit=5)] == ["first"]
-    assert [turn.content for turn in await store.load(second, limit=5)] == ["second"]
+    assert [turn.content for turn in await store.load(first, limit=5, owner="a")] == ["first"]
+    assert [turn.content for turn in await store.load(second, limit=5, owner="b")] == ["second"]
+
+
+async def test_unknown_conversation_is_not_found():
+    with pytest.raises(NotFoundError):
+        await InMemoryConversationStore().load("missing", limit=5, owner="x")
+
+
+async def test_another_owner_cannot_read_or_append():
+    store = InMemoryConversationStore()
+    conversation_id = await store.create(fingerprint="owner")
+    await store.append(conversation_id, [Turn(role="user", content="hi")], owner="owner")
+
+    with pytest.raises(NotFoundError):
+        await store.load(conversation_id, limit=5, owner="intruder")
+    with pytest.raises(NotFoundError):
+        await store.append(conversation_id, [Turn(role="user", content="inject")], owner="intruder")
 
 
 def test_unknown_roles_are_rejected():
@@ -71,9 +91,10 @@ async def test_sql_store_round_trip(clean_session):
                 tokens_used=42,
             ),
         ],
+        owner="local-user",
     )
 
-    turns = await store.load(conversation_id, limit=10)
+    turns = await store.load(conversation_id, limit=10, owner="local-user")
 
     assert [turn.role for turn in turns] == ["user", "assistant"]
     assert turns[1].sources == ({"title": "PAYE guide", "url": "https://ird.gov.lk"},)
@@ -91,11 +112,16 @@ async def test_sql_store_window_and_missing_conversation(clean_session):
     await store.append(
         conversation_id,
         [Turn(role="user", content=f"q{index}") for index in range(4)],
+        owner="local-user",
     )
 
-    assert [turn.content for turn in await store.load(conversation_id, limit=2)] == ["q2", "q3"]
+    assert [
+        turn.content for turn in await store.load(conversation_id, limit=2, owner="local-user")
+    ] == ["q2", "q3"]
 
     with pytest.raises(NotFoundError):
-        await store.load(str(uuid4()), limit=5)
+        await store.load(str(uuid4()), limit=5, owner="local-user")
     with pytest.raises(NotFoundError):
-        await store.load("not-a-uuid", limit=5)
+        await store.load("not-a-uuid", limit=5, owner="local-user")
+    with pytest.raises(NotFoundError):
+        await store.load(conversation_id, limit=5, owner="intruder")

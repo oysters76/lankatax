@@ -55,7 +55,7 @@ async def api_root(request: Request) -> ApiRoot:
                 request,
                 "ask",
                 method="POST",
-                title="Ask a question (not implemented yet)",
+                title="Ask a tax question",
             ),
             "search": link(request, "search", method="POST", title="Search the tax corpus"),
             "stats": link(request, "stats", title="Search quality metrics"),

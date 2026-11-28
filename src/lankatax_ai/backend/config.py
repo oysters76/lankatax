@@ -110,18 +110,25 @@ class Settings(BaseSettings):
     job_ingest_max_documents: int = Field(500, gt=0)
     job_enqueue_rate_limit_per_minute: int = Field(10, gt=0)
 
-    # Ask service (retrieval-augmented answers). No API wiring yet.
+    # Ask service (retrieval-augmented answers). Public API; quotas below.
     ask_llm_provider: LlmProvider = LlmProvider.openai
     ask_top_k: int = Field(6, ge=1, le=20)
     ask_min_score: float = Field(0.2, ge=0.0, le=1.0)
     ask_answer_max_tokens: int = Field(800, ge=1)
     ask_context_token_budget: int = Field(3000, ge=1)
+    ask_dedup_threshold: float = Field(0.9, ge=0.0, le=1.0)
     ask_memory_turns: int = Field(6, ge=0, le=50)
     ask_max_question_chars: int = Field(2000, ge=1)
     ask_guard_input: bool = True
     ask_guard_output: bool = True
     ask_timeout_seconds: float = Field(60.0, gt=0)
-    ask_rate_limit_per_minute: int = Field(20, ge=1)
+    ask_rate_limit_per_minute: int = Field(5, ge=1)
+    ask_rate_limit_per_day: int = Field(50, ge=1)
+    ask_global_rate_limit_per_minute: int = Field(60, ge=1)
+    ask_global_rate_limit_per_day: int = Field(1000, ge=1)
+    ask_max_concurrency: int = Field(8, ge=1)
+    ask_trusted_proxies: str = ""
+    ask_max_body_bytes: int = Field(16_384, ge=1024)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

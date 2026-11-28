@@ -35,6 +35,12 @@ class UpstreamError(ServiceError):
     code: ClassVar[str] = "upstream_error"
 
 
+class GatewayTimeoutError(ServiceError):
+    """A dependency did not finish within the configured timeout."""
+
+    code: ClassVar[str] = "gateway_timeout"
+
+
 class RateLimitError(ServiceError):
     """The caller exceeded an allowed request rate."""
 

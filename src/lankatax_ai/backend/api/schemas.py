@@ -12,15 +12,20 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.services.jobs import JobStatus, JobType, JsonObject
 from lankatax_ai.backend.services.search import limits
 from lankatax_ai.backend.types import LlmProvider, QueryType, SearchMode
 
 __all__ = [
     "ApiRoot",
+    "AskRequestSchema",
+    "AskResponse",
+    "AskUsageSchema",
     "CacheResponse",
+    "CitationSchema",
     "CountResponse",
     "ErrorBody",
     "Health",
@@ -286,3 +291,46 @@ class RegistryEntrySchema(Hypermedia):
 
 class RegistrySchema(Hypermedia):
     items: list[RegistryEntrySchema]
+
+
+class AskRequestSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1)
+    conversation_id: UUID | None = None
+
+    @field_validator("question")
+    @classmethod
+    def _question_within_limit(cls, value: str) -> str:
+        if len(value) > settings.ask_max_question_chars:
+            raise ValueError(
+                f"question must be at most {settings.ask_max_question_chars} characters"
+            )
+        return value
+
+
+class CitationSchema(BaseModel):
+    chunk_id: UUID
+    document_id: UUID
+    title: str
+    url: str | None = None
+    snippet: str
+    score: float
+    page_start: int | None = None
+    page_end: int | None = None
+
+
+class AskUsageSchema(BaseModel):
+    llm_calls: int
+    answer_chars: int
+    retrieved_chunks: int
+
+
+class AskResponse(Hypermedia):
+    conversation_id: str
+    answer: str
+    refused: bool
+    reason: str | None = None
+    citations: list[CitationSchema] = Field(default_factory=list)
+    usage: AskUsageSchema
+    timings: dict[str, int] = Field(default_factory=dict)

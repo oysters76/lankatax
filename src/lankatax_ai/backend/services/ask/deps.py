@@ -6,6 +6,7 @@ resulting ``AskDeps`` to :func:`lankatax_ai.backend.services.ask.service.ask`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
@@ -13,7 +14,12 @@ from langchain_core.language_models import BaseChatModel
 from lankatax_ai.backend.chat import GraphConfig, GraphDeps, build_ask_graph
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import async_session
-from lankatax_ai.backend.guardrails import InputValidator, OutputChecker, RateLimiter
+from lankatax_ai.backend.guardrails import (
+    InputValidator,
+    OutputChecker,
+    QuotaLimiter,
+    RateLimitRule,
+)
 from lankatax_ai.backend.llm import build_embeddings, build_llm
 from lankatax_ai.backend.memory import SqlConversationStore
 from lankatax_ai.backend.services.ask.types import (
@@ -21,6 +27,7 @@ from lankatax_ai.backend.services.ask.types import (
     AskDeps,
     AskOptions,
 )
+from lankatax_ai.backend.services.protocols import Embeddings
 from lankatax_ai.backend.services.search import (
     SearchDeps,
     SearchOptions,
@@ -33,10 +40,21 @@ from lankatax_ai.backend.types import SearchSource
 __all__ = ["build_ask_deps"]
 
 
-def build_ask_deps() -> AskDeps:
-    """Wire the production store, limiter and graph factory."""
-    embeddings = build_embeddings()
-    search_deps = build_search_deps(embeddings)
+def build_ask_deps(
+    *,
+    embeddings: Embeddings | None = None,
+    search_deps: SearchDeps | None = None,
+) -> AskDeps:
+    """Wire the production store, limiter and graph factory.
+
+    Callers that already built embeddings (the API) pass them in so the process
+    keeps one embedding client and one search wiring. Quotas and slots are
+    in-process: keep a single worker until a shared limiter exists.
+    """
+    if embeddings is None:
+        embeddings = build_embeddings()
+    if search_deps is None:
+        search_deps = build_search_deps(embeddings)
     graphs: dict[AskOptions, AnswerGraph] = {}
 
     def graph_factory(options: AskOptions) -> AnswerGraph:
@@ -49,7 +67,17 @@ def build_ask_deps() -> AskDeps:
     return AskDeps(
         graph_factory=graph_factory,
         conversation_store=SqlConversationStore(async_session),
-        rate_limiter=RateLimiter(settings.ask_rate_limit_per_minute),
+        slots=asyncio.Semaphore(settings.ask_max_concurrency),
+        rate_limiter=QuotaLimiter(
+            [
+                RateLimitRule(settings.ask_rate_limit_per_minute, 60.0),
+                RateLimitRule(settings.ask_rate_limit_per_day, 86_400.0),
+            ],
+            global_rules=[
+                RateLimitRule(settings.ask_global_rate_limit_per_minute, 60.0),
+                RateLimitRule(settings.ask_global_rate_limit_per_day, 86_400.0),
+            ],
+        ),
     )
 
 
@@ -93,5 +121,6 @@ def _search_options(options: AskOptions) -> SearchOptions:
         rerank=options.rerank,
         include_context=True,
         token_budget=options.context_token_budget,
+        dedup_threshold=options.dedup_threshold,
         llm_provider=options.provider,
     )

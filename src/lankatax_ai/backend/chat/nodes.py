@@ -87,7 +87,9 @@ class AskNodes:
         if not self._guard_input or self._input_validator is None:
             return update
 
-        result: InputGuardResult = await self._input_validator.validate(question)
+        result: InputGuardResult = await self._input_validator.validate(
+            question, history=_history_text(state.get("history") or [])
+        )
         update["input_guard"] = result
         update["question"] = result.question or question
         update["standalone_query"] = result.question or question

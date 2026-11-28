@@ -13,7 +13,11 @@ from lankatax_ai.backend.guardrails import GuardrailReason, RateLimiter
 from lankatax_ai.backend.memory import InMemoryConversationStore, Turn
 from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.ask import AskDeps, AskOptions, AskRequest, ask
-from lankatax_ai.backend.services.errors import RateLimitError, UpstreamError, ValidationError
+from lankatax_ai.backend.services.errors import (
+    GatewayTimeoutError,
+    RateLimitError,
+    ValidationError,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -26,7 +30,12 @@ def _result(score: float = 0.8) -> RetrievalResult:
         score=score,
         vector_score=score,
         keyword_score=None,
-        metadata={"document_title": "PAYE guide", "from_url": "https://ird.gov.lk/paye"},
+        metadata={
+            "document_title": "PAYE guide",
+            "from_url": "https://ird.gov.lk/paye",
+            "page_start": 4,
+            "page_end": 5,
+        },
     )
 
 
@@ -46,11 +55,18 @@ class _SlowGraph:
         return dict(state)
 
 
-def _deps(graph: Any, *, store: Any = None, limiter: Any = None) -> AskDeps:
+def _deps(
+    graph: Any,
+    *,
+    store: Any = None,
+    limiter: Any = None,
+    slots: Any = None,
+) -> AskDeps:
     return AskDeps(
         graph_factory=lambda options: graph,
         conversation_store=store or InMemoryConversationStore(),
         rate_limiter=limiter or RateLimiter(limit=100),
+        slots=slots,
     )
 
 
@@ -79,11 +95,13 @@ async def test_ask_returns_answer_and_citations_and_persists():
     assert outcome.refused is False
     assert outcome.citations[0].title == "PAYE guide"
     assert outcome.citations[0].url == "https://ird.gov.lk/paye"
+    assert outcome.citations[0].page_start == 4
+    assert outcome.citations[0].page_end == 5
     assert outcome.usage.llm_calls == 3
     assert outcome.usage.retrieved_chunks == 1
     assert outcome.timings == {"answer": 4, "retrieve": 7}
     assert graph.calls[0]["history"] == []
-    turns = await store.load(outcome.conversation_id, limit=10)
+    turns = await store.load(outcome.conversation_id, limit=10, owner="anonymous")
     assert [turn.role for turn in turns] == ["user", "assistant"]
     assert turns[1].sources[0]["title"] == "PAYE guide"
 
@@ -106,25 +124,33 @@ async def test_refusal_is_not_persisted():
     assert outcome.refused is True
     assert outcome.reason is GuardrailReason.off_topic
     assert outcome.citations == ()
-    assert await store.load(outcome.conversation_id, limit=10) == []
+    assert await store.load(outcome.conversation_id, limit=10, owner="anonymous") == []
 
 
 async def test_existing_conversation_history_reaches_the_graph():
     store = InMemoryConversationStore()
     conversation_id = await store.create(fingerprint="user")
-    await store.append(conversation_id, [Turn(role="user", content="How is PAYE withheld?")])
+    await store.append(
+        conversation_id,
+        [Turn(role="user", content="How is PAYE withheld?")],
+        owner="user",
+    )
     graph = _FakeGraph(_answer_state())
     deps = _deps(graph, store=store)
 
     outcome = await ask(
-        AskRequest(question="What about directors?", conversation_id=conversation_id),
+        AskRequest(
+            question="What about directors?",
+            conversation_id=conversation_id,
+            fingerprint="user",
+        ),
         deps=deps,
     )
 
     assert outcome.conversation_id == conversation_id
     history = graph.calls[0]["history"]
     assert [turn.content for turn in history] == ["How is PAYE withheld?"]
-    turns = await store.load(conversation_id, limit=10)
+    turns = await store.load(conversation_id, limit=10, owner="user")
     assert len(turns) == 3
 
 
@@ -150,7 +176,7 @@ async def test_timeout_maps_to_an_upstream_error(monkeypatch):
     monkeypatch.setattr(settings, "ask_timeout_seconds", 0.001)
     deps = _deps(_SlowGraph())
 
-    with pytest.raises(UpstreamError, match="too long"):
+    with pytest.raises(GatewayTimeoutError, match="too long"):
         await ask(AskRequest(question="How is PAYE withheld?"), deps=deps)
 
 
@@ -168,7 +194,23 @@ async def test_unknown_citation_numbers_are_dropped():
 
 
 async def test_options_are_validated():
+    assert AskOptions().dedup_threshold == 0.9
     with pytest.raises(ValidationError, match="Top-k"):
         AskOptions(top_k=0)
     with pytest.raises(ValidationError, match="min_score"):
         AskOptions(min_score=2.0)
+    with pytest.raises(ValidationError, match="dedup_threshold"):
+        AskOptions(dedup_threshold=1.1)
+
+
+async def test_busy_slot_rejects_before_running_the_graph():
+    slots = asyncio.Semaphore(1)
+    await slots.acquire()
+    graph = _FakeGraph(_answer_state())
+    deps = _deps(graph, slots=slots)
+
+    with pytest.raises(RateLimitError, match="busy"):
+        await ask(AskRequest(question="PAYE?"), deps=deps)
+
+    assert graph.calls == []
+    slots.release()

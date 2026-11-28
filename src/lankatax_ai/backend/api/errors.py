@@ -7,6 +7,7 @@ Every error carries ``links`` so a client can recover without guessing URLs.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -16,13 +17,17 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from lankatax_ai.backend.api.utils import error_payload
-from lankatax_ai.backend.services.errors import ServiceError
+from lankatax_ai.backend.services.errors import RateLimitError, ServiceError
 
 __all__ = ["ApiError", "install_error_handlers"]
+
+logger = logging.getLogger(__name__)
 
 STATUS_BY_SERVICE_CODE: dict[str, int] = {
     "validation_error": 422,
     "not_found": 404,
+    "rate_limited": 429,
+    "gateway_timeout": 504,
     "upstream_error": 502,
 }
 
@@ -68,11 +73,25 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ServiceError)
     async def _service_error(request: Request, exc: ServiceError) -> JSONResponse:
+        headers = None
+        if isinstance(exc, RateLimitError) and exc.retry_after is not None:
+            headers = {"Retry-After": str(exc.retry_after)}
         return _response(
             request,
             status_code=STATUS_BY_SERVICE_CODE.get(exc.code, 500),
             code=exc.code,
             detail=str(exc),
+            headers=headers,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled API error")
+        return _response(
+            request,
+            status_code=500,
+            code="internal_error",
+            detail="Internal server error",
         )
 
     @app.exception_handler(RequestValidationError)
@@ -82,7 +101,7 @@ def install_error_handlers(app: FastAPI) -> None:
             status_code=422,
             code="validation_error",
             detail="Request validation failed",
-            errors=[dict(error) for error in exc.errors()],
+            errors=_validation_details(exc),
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -111,3 +130,15 @@ def _response(
         content=jsonable_encoder(body),
         headers=headers,
     )
+
+
+def _validation_details(exc: RequestValidationError) -> list[dict[str, Any]]:
+    """Make pydantic errors JSON-safe; custom validators put exceptions in ctx."""
+    details: list[dict[str, Any]] = []
+    for error in exc.errors():
+        detail = dict(error)
+        ctx = detail.get("ctx")
+        if isinstance(ctx, dict):
+            detail["ctx"] = {key: str(value) for key, value in ctx.items()}
+        details.append(detail)
+    return details

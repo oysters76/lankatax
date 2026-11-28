@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 
 from lankatax_ai.backend.api.deps import ApiDeps, build_api_deps
 from lankatax_ai.backend.api.errors import install_error_handlers
 from lankatax_ai.backend.api.routers import (
+    ask,
     auth,
     cache,
     docs,
@@ -20,9 +22,9 @@ from lankatax_ai.backend.api.routers import (
     scrape,
     search,
     stats,
-    stubs,
 )
 from lankatax_ai.backend.api.security import AuthConfig, require_access
+from lankatax_ai.backend.api.utils import error_payload
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import dispose_engine
 
@@ -70,9 +72,29 @@ def create_app(
     app.state.auth = resolved_auth
     app.state.docs_protected = protected_docs
 
+    @app.middleware("http")
+    async def _limit_ask_body(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if request.url.path == "/api/v1/ask" and request.method == "POST":
+            length = request.headers.get("content-length")
+            if length and length.isdigit() and int(length) > settings.ask_max_body_bytes:
+                body = error_payload(
+                    request,
+                    code="request_too_large",
+                    detail="Request body is too large",
+                )
+                return JSONResponse(
+                    status_code=413,
+                    content=body.model_dump(mode="json"),
+                )
+        return await call_next(request)
+
     install_error_handlers(app)
     app.include_router(root.router)
     app.include_router(auth.router)
+    app.include_router(ask.router)
     app.include_router(search.router)
     app.include_router(stats.router)
     app.include_router(cache.router)
@@ -80,7 +102,6 @@ def create_app(
     app.include_router(scrape.router)
     app.include_router(ingest.router)
     app.include_router(pipeline.router)
-    app.include_router(stubs.router)
     app.include_router(
         docs.router,
         dependencies=[Depends(require_access)] if protected_docs else [],
