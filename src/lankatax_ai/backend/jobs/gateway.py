@@ -16,7 +16,9 @@ from hatchet_sdk.clients.rest.exceptions import (
 from hatchet_sdk.clients.rest.models.v1_task_status import V1TaskStatus
 from hatchet_sdk.clients.rest.models.v1_task_summary import V1TaskSummary
 from hatchet_sdk.exceptions import DedupeViolationError
+from pydantic import ValidationError as PydanticValidationError
 
+from lankatax_ai.backend.jobs.contracts import serialize_input
 from lankatax_ai.backend.services.errors import (
     NotFoundError,
     ServiceError,
@@ -57,10 +59,15 @@ class HatchetJobGateway(JobGateway):
             metadata["idempotency_key"] = request.idempotency_key
 
         try:
+            payload = serialize_input(request.type, request.params)
+        except PydanticValidationError as error:
+            raise ValidationError(f"Invalid {request.type.value} parameters: {error}") from error
+
+        try:
             details = await self._call(
                 lambda: self._client.runs.aio_create(
                     workflow_name=request.type.value,
-                    input=dict(request.params),
+                    input=payload,
                     additional_metadata=metadata,
                 )
             )

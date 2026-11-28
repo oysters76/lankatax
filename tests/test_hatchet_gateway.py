@@ -150,7 +150,15 @@ async def test_enqueue_maps_request_to_hatchet():
     assert client.runs.created == [
         {
             "workflow_name": "pipeline.refresh",
-            "input": {"full": True},
+            "input": {
+                "idempotency_key": "pipeline-refresh",
+                "full": True,
+                "discover_pdfs": True,
+                "target": "pending",
+                "max_documents": None,
+                "max_tokens": None,
+                "batch_size": 25,
+            },
             "additional_metadata": {
                 "job_type": "pipeline.refresh",
                 "requested_by": "admin",
@@ -158,6 +166,47 @@ async def test_enqueue_maps_request_to_hatchet():
             },
         }
     ]
+
+
+async def test_enqueue_sends_contract_defaults_to_hatchet():
+    gateway, client = _gateway()
+
+    await gateway.enqueue(JobRequest(type=JobType.ingest_pending))
+
+    assert client.runs.created[0]["input"] == {
+        "idempotency_key": "ingest-pending",
+        "target": "pending",
+        "max_documents": None,
+        "max_tokens": None,
+        "batch_size": 25,
+    }
+
+
+async def test_enqueue_serializes_document_ids():
+    gateway, client = _gateway()
+    document_id = "3f1c2b4a-5d6e-4f70-8a91-b2c3d4e5f607"
+
+    await gateway.enqueue(
+        JobRequest(
+            type=JobType.ingest_document,
+            params={"document_id": document_id},
+        )
+    )
+
+    assert client.runs.created[0]["input"] == {
+        "document_id": document_id,
+        "max_tokens": None,
+        "batch_size": 25,
+    }
+
+
+async def test_enqueue_rejects_invalid_params_before_hatchet():
+    gateway, client = _gateway()
+
+    with pytest.raises(ValidationError, match="Invalid scrape.registry parameters"):
+        await gateway.enqueue(JobRequest(type=JobType.scrape_registry, params={"batch_size": 0}))
+
+    assert client.runs.created == []
 
 
 async def test_enqueue_returns_existing_run_on_collision():

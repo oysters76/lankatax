@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from lankatax_ai.backend.services.jobs.types import JobType
+
 __all__ = [
+    "JOB_INPUTS",
     "CacheExpireInput",
     "CacheOutput",
     "IngestDocumentInput",
@@ -16,6 +20,7 @@ __all__ = [
     "RefreshInput",
     "ScrapeInput",
     "ScrapeOutput",
+    "serialize_input",
 ]
 
 
@@ -77,3 +82,24 @@ class IngestOutput(BaseModel):
 class CacheOutput(BaseModel):
     expired: int
     duration_ms: int
+
+
+#: Workflow input model per job type, used to validate and default engine inputs.
+JOB_INPUTS: dict[JobType, type[BaseModel]] = {
+    JobType.pipeline_refresh: RefreshInput,
+    JobType.scrape_registry: ScrapeInput,
+    JobType.ingest_pending: IngestInput,
+    JobType.ingest_document: IngestDocumentInput,
+    JobType.cache_expire: CacheExpireInput,
+}
+
+
+def serialize_input(job_type: JobType, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate params against the workflow contract, applying its defaults.
+
+    Hatchet evaluates idempotency against the raw input it receives, so defaults
+    such as ``idempotency_key`` must be present in the payload, not only in the
+    task signature.
+    """
+    model = JOB_INPUTS[job_type]
+    return model.model_validate(dict(params)).model_dump(mode="json")

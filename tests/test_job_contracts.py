@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from lankatax_ai.backend.jobs import contracts, policies
+from lankatax_ai.backend.services.jobs import JobType
 
 pytestmark = pytest.mark.unit
 
@@ -60,6 +61,41 @@ def test_refresh_input_accepts_budget_and_strategy():
     assert payload.full is True
     assert payload.target == "all"
     assert payload.max_tokens == 5000
+
+
+def test_serialize_input_applies_contract_defaults():
+    payload = contracts.serialize_input(JobType.ingest_pending, {})
+
+    assert payload["idempotency_key"] == "ingest-pending"
+    assert payload["target"] == "pending"
+    assert payload["batch_size"] == 25
+
+
+@pytest.mark.parametrize(
+    ("job_type", "expected_key"),
+    [
+        (JobType.pipeline_refresh, "pipeline-refresh"),
+        (JobType.scrape_registry, "scrape-registry"),
+        (JobType.ingest_pending, "ingest-pending"),
+    ],
+)
+def test_serialize_input_always_includes_an_idempotency_key(job_type, expected_key):
+    assert contracts.serialize_input(job_type, {})["idempotency_key"] == expected_key
+
+
+def test_serialize_input_keeps_explicit_values():
+    payload = contracts.serialize_input(
+        JobType.scrape_registry,
+        {"idempotency_key": "manual-1", "full": True},
+    )
+
+    assert payload["idempotency_key"] == "manual-1"
+    assert payload["full"] is True
+
+
+def test_serialize_input_rejects_invalid_params():
+    with pytest.raises(PydanticValidationError):
+        contracts.serialize_input(JobType.scrape_registry, {"batch_size": 0})
 
 
 def test_outputs_round_trip():
