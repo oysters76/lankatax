@@ -13,6 +13,7 @@ CACHE_RETRIES = 2
 SCRAPE_EXECUTION_TIMEOUT = timedelta(seconds=settings.job_scrape_timeout_seconds)
 SCRAPE_HEARTBEAT = timedelta(minutes=5)
 INGEST_EXECUTION_TIMEOUT = timedelta(seconds=settings.job_ingest_timeout_seconds)
+INGEST_HEARTBEAT = timedelta(minutes=10)
 CACHE_EXECUTION_TIMEOUT = timedelta(seconds=settings.job_cache_timeout_seconds)
 SCHEDULE_TIMEOUT = timedelta(seconds=settings.job_schedule_timeout_seconds)
 

@@ -6,7 +6,7 @@ its collaborators from deps.
 """
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +75,7 @@ async def ingest_batches(
     policy: EmbeddingPolicy,
     *,
     max_tokens: int | None = None,
-) -> AsyncIterator[IngestBatch]:
+) -> AsyncGenerator[IngestBatch]:
     """Yield one result per document, committing each successful document.
 
     Consumers stop by breaking/closing the iterator. The token budget is checked
