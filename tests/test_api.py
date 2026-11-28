@@ -433,7 +433,7 @@ def test_api_root_advertises_every_action(client: TestClient) -> None:
         assert _follow(client, target) not in (404, 405)
 
 
-def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
+def test_api_root_marks_public_and_guarded_links(client: TestClient) -> None:
     links = client.get("/api/v1").json()["links"]
 
     assert links["ask"]["available"] is True
