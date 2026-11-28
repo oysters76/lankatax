@@ -52,6 +52,10 @@ USERNAME = "admin"
 PASSWORD = "secret"
 SECRET = "test-secret-key-for-the-lankatax-api-0123456789"
 TOKEN_URL = "/api/v1/auth/token"
+JOBS_URL = "/api/v1/jobs"
+SCRAPE_URL = "/api/v1/scrape"
+INGEST_URL = "/api/v1/ingest"
+PIPELINE_REFRESH_URL = "/api/v1/pipeline/refresh"
 
 AUTH = AuthConfig(
     username=USERNAME,
@@ -79,7 +83,17 @@ EXPECTED_ACTIONS = {
     "docs",
 }
 
-PROTECTED_STUBS: list[tuple[str, str]] = []
+#: Routes that were 501 stubs before the job API; they must still refuse a missing token.
+PROTECTED_JOB_ROUTES = [
+    ("POST", INGEST_URL),
+    ("GET", f"{INGEST_URL}/status"),
+    ("GET", f"{SCRAPE_URL}/urls"),
+    ("POST", SCRAPE_URL),
+    ("GET", f"{SCRAPE_URL}/status"),
+    ("POST", PIPELINE_REFRESH_URL),
+    ("GET", JOBS_URL),
+    ("POST", JOBS_URL),
+]
 
 
 class _FakeSession:
@@ -447,17 +461,12 @@ def test_open_docs_mode(open_client: TestClient) -> None:
     assert links["docs"]["auth_required"] is False
 
 
-@pytest.mark.parametrize(("method", "path"), PROTECTED_STUBS)
-def test_protected_stubs_need_a_token(client: TestClient, method: str, path: str) -> None:
-    assert client.request(method, path).status_code == 401
+@pytest.mark.parametrize(("method", "path"), PROTECTED_JOB_ROUTES)
+def test_job_routes_need_a_token(client: TestClient, method: str, path: str) -> None:
+    response = client.request(method, path)
 
-    token = _login(client)
-    response = client.request(method, path, headers=_auth(token))
-
-    assert response.status_code == 501
-    body = response.json()
-    assert body["code"] == "not_implemented"
-    assert body["links"]["self"]["available"] is False
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_ask_is_public_and_still_a_stub(client: TestClient) -> None:
@@ -566,22 +575,17 @@ def test_cache_mutations_report_counts(client: TestClient) -> None:
     assert "cache_stats" in cleared.json()["links"]
 
 
-def test_jobs_require_authentication(client: TestClient) -> None:
-    assert client.post("/api/v1/jobs", json={"type": "pipeline.refresh"}).status_code == 401
-    assert client.get("/api/v1/jobs").status_code == 401
-
-
 def test_enqueue_job_returns_location(client: TestClient) -> None:
     token = _login(client)
 
     response = client.post(
-        "/api/v1/jobs",
+        JOBS_URL,
         json={"type": "pipeline.refresh", "params": {"full": True}},
         headers=_auth(token),
     )
 
     assert response.status_code == 202
-    assert response.headers["location"].endswith("/api/v1/jobs/run-1")
+    assert response.headers["location"].endswith(f"{JOBS_URL}/run-1")
     assert response.json()["run_id"] == "run-1"
     assert response.json()["reused"] is False
 
@@ -589,17 +593,17 @@ def test_enqueue_job_returns_location(client: TestClient) -> None:
 def test_list_jobs_returns_an_empty_page(client: TestClient) -> None:
     token = _login(client)
 
-    response = client.get("/api/v1/jobs", headers=_auth(token))
+    response = client.get(JOBS_URL, headers=_auth(token))
 
     assert response.status_code == 200
     assert response.json()["items"] == []
-    assert response.json()["links"]["self"]["href"].endswith("/api/v1/jobs")
+    assert response.json()["links"]["self"]["href"].endswith(JOBS_URL)
 
 
 def test_job_detail_maps_not_found(client: TestClient) -> None:
     token = _login(client)
 
-    response = client.get("/api/v1/jobs/missing", headers=_auth(token))
+    response = client.get(f"{JOBS_URL}/missing", headers=_auth(token))
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
@@ -608,8 +612,8 @@ def test_job_detail_maps_not_found(client: TestClient) -> None:
 def test_job_cancel_and_replay_return_actions(client: TestClient) -> None:
     token = _login(client)
 
-    cancelled = client.post("/api/v1/jobs/run-1/cancel", headers=_auth(token))
-    replayed = client.post("/api/v1/jobs/run-1/replay", headers=_auth(token))
+    cancelled = client.post(f"{JOBS_URL}/run-1/cancel", headers=_auth(token))
+    replayed = client.post(f"{JOBS_URL}/run-1/replay", headers=_auth(token))
 
     assert cancelled.status_code == 202
     assert cancelled.json()["action"] == "cancel"
@@ -621,18 +625,18 @@ def test_scrape_and_pipeline_endpoints_enqueue_jobs(client: TestClient) -> None:
     token = _login(client)
 
     scraped = client.post(
-        "/api/v1/scrape",
+        SCRAPE_URL,
         json={"full": True, "idempotency_key": "scrape-1"},
         headers=_auth(token),
     )
     refreshed = client.post(
-        "/api/v1/pipeline/refresh",
+        PIPELINE_REFRESH_URL,
         json={"target": "pending", "max_tokens": 1000},
         headers=_auth(token),
     )
 
     assert scraped.status_code == 202
-    assert scraped.headers["location"].endswith("/api/v1/jobs/run-1")
+    assert scraped.headers["location"].endswith(f"{JOBS_URL}/run-1")
     assert refreshed.status_code == 202
 
 
@@ -640,9 +644,9 @@ def test_ingest_endpoints_enqueue_pending_or_document(client: TestClient) -> Non
     token = _login(client)
     document_id = uuid4()
 
-    pending = client.post("/api/v1/ingest", json={}, headers=_auth(token))
+    pending = client.post(INGEST_URL, json={}, headers=_auth(token))
     document = client.post(
-        "/api/v1/ingest",
+        INGEST_URL,
         json={"document_id": str(document_id)},
         headers=_auth(token),
     )
@@ -654,9 +658,9 @@ def test_ingest_endpoints_enqueue_pending_or_document(client: TestClient) -> Non
 def test_scrape_and_ingest_status_endpoints(client: TestClient) -> None:
     token = _login(client)
 
-    scrape = client.get("/api/v1/scrape/status", headers=_auth(token))
-    ingest = client.get("/api/v1/ingest/status", headers=_auth(token))
-    urls = client.get("/api/v1/scrape/urls", headers=_auth(token))
+    scrape = client.get(f"{SCRAPE_URL}/status", headers=_auth(token))
+    ingest = client.get(f"{INGEST_URL}/status", headers=_auth(token))
+    urls = client.get(f"{SCRAPE_URL}/urls", headers=_auth(token))
 
     assert scrape.status_code == 200
     assert scrape.json()["total"] == 2
