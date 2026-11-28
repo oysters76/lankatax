@@ -62,6 +62,18 @@ def test_scrape_base_host_is_read(monkeypatch):
     assert _load().scrape_base_host == "example.lk"
 
 
+def test_ask_settings_are_read(monkeypatch):
+    monkeypatch.setenv("ASK_TOP_K", "9")
+    monkeypatch.setenv("ASK_GUARD_OUTPUT", "false")
+    monkeypatch.setenv("ASK_LLM_PROVIDER", "gemini")
+
+    settings = _load()
+
+    assert settings.ask_top_k == 9
+    assert settings.ask_guard_output is False
+    assert settings.ask_llm_provider.value == "gemini"
+
+
 def test_langsmith_names_are_read(monkeypatch):
     _clear_langsmith(monkeypatch)
     monkeypatch.setenv("LANGSMITH_API_KEY", "new-key")

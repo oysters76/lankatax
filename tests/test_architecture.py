@@ -95,3 +95,8 @@ def test_services_do_not_import_the_hatchet_adapter() -> None:
         "lankatax_ai.backend.jobs",
     )
     assert not offenders, "Services must not depend on backend/jobs:\n" + "\n".join(offenders)
+
+
+def test_langgraph_is_confined_to_the_chat_package() -> None:
+    offenders = _offenders(BACKEND, {"langgraph"}, allowed=BACKEND / "chat")
+    assert not offenders, "LangGraph belongs in backend/chat only:\n" + "\n".join(offenders)

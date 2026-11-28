@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from lankatax_ai.backend.types import PromptSource
+from lankatax_ai.backend.types import LlmProvider, PromptSource
 
 
 class Settings(BaseSettings):
@@ -110,7 +110,20 @@ class Settings(BaseSettings):
     job_ingest_max_documents: int = Field(500, gt=0)
     job_enqueue_rate_limit_per_minute: int = Field(10, gt=0)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # Ask service (retrieval-augmented answers). No API wiring yet.
+    ask_llm_provider: LlmProvider = LlmProvider.openai
+    ask_top_k: int = Field(6, ge=1, le=20)
+    ask_min_score: float = Field(0.2, ge=0.0, le=1.0)
+    ask_answer_max_tokens: int = Field(800, ge=1)
+    ask_context_token_budget: int = Field(3000, ge=1)
+    ask_memory_turns: int = Field(6, ge=0, le=50)
+    ask_max_question_chars: int = Field(2000, ge=1)
+    ask_guard_input: bool = True
+    ask_guard_output: bool = True
+    ask_timeout_seconds: float = Field(60.0, gt=0)
+    ask_rate_limit_per_minute: int = Field(20, ge=1)
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def connection_string(self) -> str:

@@ -1,0 +1,23 @@
+id: condense
+version: v1
+description: Rewrite a follow-up question as a standalone tax search query.
+created: 2026-11-28
+tags: [rag, memory]
+input_variables: [history, question]
+
+messages:
+  - role: system
+    content: |
+      Rewrite the user's follow-up question as a standalone search query for a
+      Sri Lankan tax knowledge base.
+
+      Resolve pronouns and references using the conversation, keep the original
+      intent, and add the tax type when it is implied (for example PAYE, VAT,
+      income tax, APIT). Do not answer the question and do not add new facts.
+      Return the rewritten question only.
+  - role: human
+    content: |
+      Conversation so far:
+      {history}
+
+      Follow-up question: {question}

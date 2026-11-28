@@ -33,3 +33,15 @@ class UpstreamError(ServiceError):
     """A dependency (LLM, embeddings, database) failed."""
 
     code: ClassVar[str] = "upstream_error"
+
+
+class RateLimitError(ServiceError):
+    """The caller exceeded an allowed request rate."""
+
+    code: ClassVar[str] = "rate_limited"
+
+    def __init__(
+        self, message: str = "Too many requests", *, retry_after: int | None = None
+    ) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
