@@ -38,6 +38,21 @@ def test_model_override_is_respected():
     assert llm.model_name == "llama-3.1-8b-instant"
 
 
+@pytest.mark.parametrize(
+    ("provider", "attribute"),
+    [
+        (LlmProvider.gemini, "max_output_tokens"),
+        (LlmProvider.groq, "max_tokens"),
+        (LlmProvider.deepseek, "max_tokens"),
+        (LlmProvider.openai, "max_tokens"),
+    ],
+)
+def test_max_tokens_override_is_respected(provider, attribute):
+    llm = build_llm(provider, max_tokens=321)
+
+    assert getattr(llm, attribute) == 321
+
+
 def test_deepseek_points_at_deepseek_base_url():
     llm = build_llm(LlmProvider.deepseek)
 

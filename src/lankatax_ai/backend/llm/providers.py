@@ -15,7 +15,12 @@ DEFAULT_MODELS: dict[LlmProvider, str] = {
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 
-def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatModel:
+def build_llm(
+    provider: LlmProvider,
+    *,
+    model: str | None = None,
+    max_tokens: int | None = None,
+) -> BaseChatModel:
     """Build a chat model for one provider.
 
     SDKs are imported lazily so a missing optional dependency only affects the
@@ -27,6 +32,7 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
         return ChatGoogleGenerativeAI(
             model=model or DEFAULT_MODELS[LlmProvider.gemini],
             google_api_key=settings.google_api_key.get_secret_value(),
+            max_output_tokens=max_tokens,
         )
 
     if provider is LlmProvider.groq:
@@ -35,6 +41,7 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
         return ChatGroq(
             model=model or DEFAULT_MODELS[LlmProvider.groq],
             api_key=settings.groq_api_key,
+            max_tokens=max_tokens,
         )
 
     if provider is LlmProvider.deepseek:
@@ -42,18 +49,20 @@ def build_llm(provider: LlmProvider, *, model: str | None = None) -> BaseChatMod
 
         if settings.deepseek_api_key is None:
             raise ValueError("DEEPSEEK_API_KEY is not set")
-        return ChatOpenAI(
+        return ChatOpenAI(  # type: ignore[call-arg]  # max_tokens is a pydantic alias
             model=model or DEFAULT_MODELS[LlmProvider.deepseek],
             api_key=settings.deepseek_api_key,
             base_url=DEEPSEEK_BASE_URL,
+            max_tokens=max_tokens,
         )
 
     if provider is LlmProvider.openai:
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
+        return ChatOpenAI(  # type: ignore[call-arg]  # max_tokens is a pydantic alias
             model=model or DEFAULT_MODELS[LlmProvider.openai],
             api_key=settings.openai_api_key,
+            max_tokens=max_tokens,
         )
 
     raise ValueError(f"Unsupported LLM provider: {provider!r}")

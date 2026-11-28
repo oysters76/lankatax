@@ -54,7 +54,7 @@ def build_ask_deps() -> AskDeps:
 
 
 def _build_graph(options: AskOptions, search_deps: SearchDeps) -> AnswerGraph:
-    llm: BaseChatModel = build_llm(options.provider)
+    llm: BaseChatModel = build_llm(options.provider, max_tokens=options.answer_max_tokens)
 
     async def run_search(query: str) -> SearchOutcome:
         return await search(
