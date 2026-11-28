@@ -52,16 +52,17 @@ class HatchetJobGateway(JobGateway):
         self._client = client
 
     async def enqueue(self, request: JobRequest) -> JobReceipt:
-        metadata: dict[str, str] = {"job_type": request.type.value}
-        if request.requested_by:
-            metadata["requested_by"] = request.requested_by
-        if request.idempotency_key:
-            metadata["idempotency_key"] = request.idempotency_key
-
         try:
             payload = serialize_input(request.type, request.params)
         except PydanticValidationError as error:
             raise ValidationError(f"Invalid {request.type.value} parameters: {error}") from error
+
+        idempotency_key = request.idempotency_key or self._payload_key(payload)
+        metadata: dict[str, str] = {"job_type": request.type.value}
+        if request.requested_by:
+            metadata["requested_by"] = request.requested_by
+        if idempotency_key:
+            metadata["idempotency_key"] = idempotency_key
 
         try:
             details = await self._call(
@@ -73,6 +74,13 @@ class HatchetJobGateway(JobGateway):
             )
         except IdempotencyCollisionError as error:
             return JobReceipt(run_id=error.existing_run_external_id, reused=True)
+        except UpstreamError:
+            # Lite reports some collisions as a plain 500, so fall back to the
+            # active run recorded under the same idempotency key.
+            existing = await self._resolve_active_run(request.type, idempotency_key)
+            if existing is None:
+                raise
+            return JobReceipt(run_id=existing, reused=True)
         except DedupeViolationError as error:
             raise UpstreamError(
                 "Hatchet rejected a duplicate run without a run reference"
@@ -81,6 +89,42 @@ class HatchetJobGateway(JobGateway):
             raise ValidationError("Job parameters are not JSON-serializable") from error
 
         return JobReceipt(run_id=details.run.metadata.id)
+
+    async def _resolve_active_run(
+        self,
+        job_type: JobType,
+        idempotency_key: str | None,
+    ) -> str | None:
+        """Find the queued or running run holding an idempotency key."""
+        if not idempotency_key:
+            return None
+        try:
+            by_type, _ = await self._workflow_index()
+            workflow_id = by_type.get(job_type)
+            if workflow_id is None:
+                return None
+            response = await self._call(
+                lambda: self._client.runs.aio_list(
+                    workflow_ids=[workflow_id],
+                    statuses=[V1TaskStatus.QUEUED, V1TaskStatus.RUNNING],
+                    only_tasks=False,
+                    include_payloads=True,
+                    limit=50,
+                )
+            )
+        except ServiceError:
+            logger.warning("Could not resolve the idempotent run", exc_info=True)
+            return None
+
+        for row in response.rows or []:
+            if self._metadata_str(row.additional_metadata, "idempotency_key") == idempotency_key:
+                return row.workflow_run_external_id or row.metadata.id
+        return None
+
+    @staticmethod
+    def _payload_key(payload: Mapping[str, object]) -> str | None:
+        value = payload.get("idempotency_key")
+        return value if isinstance(value, str) and value else None
 
     async def list_jobs(self, filters: JobFilter) -> list[JobSummary]:
         by_type, by_id = await self._workflow_index()

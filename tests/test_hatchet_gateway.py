@@ -10,6 +10,7 @@ from hatchet_sdk.clients.rest.exceptions import (
     ApiException,
     BadRequestException,
     NotFoundException,
+    ServiceException,
 )
 from hatchet_sdk.clients.rest.models.v1_task_status import V1TaskStatus
 from hatchet_sdk.exceptions import DedupeViolationError
@@ -217,6 +218,38 @@ async def test_enqueue_returns_existing_run_on_collision():
 
     assert receipt.run_id == "existing-run"
     assert receipt.reused is True
+
+
+async def test_enqueue_resolves_a_plain_500_collision_from_the_active_run():
+    gateway, client = _gateway()
+    client.runs.create_error = ServiceException(status=500)
+    client.runs.rows = [
+        _row(
+            run_id="existing-run",
+            metadata={
+                "job_type": "pipeline.refresh",
+                "idempotency_key": "pipeline-refresh",
+            },
+        )
+    ]
+
+    receipt = await gateway.enqueue(JobRequest(type=JobType.pipeline_refresh))
+
+    assert receipt.run_id == "existing-run"
+    assert receipt.reused is True
+    assert client.runs.list_kwargs["statuses"] == [
+        V1TaskStatus.QUEUED,
+        V1TaskStatus.RUNNING,
+    ]
+
+
+async def test_enqueue_reraises_a_500_when_no_run_holds_the_key():
+    gateway, client = _gateway()
+    client.runs.create_error = ServiceException(status=500)
+    client.runs.rows = []
+
+    with pytest.raises(UpstreamError):
+        await gateway.enqueue(JobRequest(type=JobType.pipeline_refresh))
 
 
 async def test_enqueue_maps_bad_request_to_validation_error():
