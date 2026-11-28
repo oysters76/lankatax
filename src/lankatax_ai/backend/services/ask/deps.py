@@ -21,6 +21,7 @@ from lankatax_ai.backend.services.ask.types import (
     AskDeps,
     AskOptions,
 )
+from lankatax_ai.backend.services.protocols import Embeddings
 from lankatax_ai.backend.services.search import (
     SearchDeps,
     SearchOptions,
@@ -33,10 +34,20 @@ from lankatax_ai.backend.types import SearchSource
 __all__ = ["build_ask_deps"]
 
 
-def build_ask_deps() -> AskDeps:
-    """Wire the production store, limiter and graph factory."""
-    embeddings = build_embeddings()
-    search_deps = build_search_deps(embeddings)
+def build_ask_deps(
+    *,
+    embeddings: Embeddings | None = None,
+    search_deps: SearchDeps | None = None,
+) -> AskDeps:
+    """Wire the production store, limiter and graph factory.
+
+    Callers that already built embeddings (the API) pass them in so the process
+    keeps one embedding client and one search wiring.
+    """
+    if embeddings is None:
+        embeddings = build_embeddings()
+    if search_deps is None:
+        search_deps = build_search_deps(embeddings)
     graphs: dict[AskOptions, AnswerGraph] = {}
 
     def graph_factory(options: AskOptions) -> AnswerGraph:
