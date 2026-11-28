@@ -11,7 +11,6 @@ from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from lankatax_ai.backend.config import settings
-from lankatax_ai.backend.guardrails.rate_limiter import RateLimiter
 from lankatax_ai.backend.guardrails.types import GuardrailReason
 from lankatax_ai.backend.memory.types import ConversationStore
 from lankatax_ai.backend.rag.types import RetrievalResult
@@ -28,6 +27,7 @@ __all__ = [
     "AskRequest",
     "AskUsage",
     "Citation",
+    "RateLimiterPort",
 ]
 
 
@@ -108,6 +108,12 @@ class AskOutcome:
     trace_url: str | None = None
 
 
+class RateLimiterPort(Protocol):
+    """Whatever enforces quotas for the ask service."""
+
+    async def check(self, key: str) -> None: ...
+
+
 class AnswerGraph(Protocol):
     """The orchestration port; the LangGraph adapter implements it."""
 
@@ -120,4 +126,4 @@ class AskDeps:
 
     graph_factory: Callable[[AskOptions], AnswerGraph]
     conversation_store: ConversationStore
-    rate_limiter: RateLimiter
+    rate_limiter: RateLimiterPort

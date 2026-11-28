@@ -13,7 +13,12 @@ from langchain_core.language_models import BaseChatModel
 from lankatax_ai.backend.chat import GraphConfig, GraphDeps, build_ask_graph
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import async_session
-from lankatax_ai.backend.guardrails import InputValidator, OutputChecker, RateLimiter
+from lankatax_ai.backend.guardrails import (
+    InputValidator,
+    OutputChecker,
+    QuotaLimiter,
+    RateLimitRule,
+)
 from lankatax_ai.backend.llm import build_embeddings, build_llm
 from lankatax_ai.backend.memory import SqlConversationStore
 from lankatax_ai.backend.services.ask.types import (
@@ -60,7 +65,16 @@ def build_ask_deps(
     return AskDeps(
         graph_factory=graph_factory,
         conversation_store=SqlConversationStore(async_session),
-        rate_limiter=RateLimiter(settings.ask_rate_limit_per_minute),
+        rate_limiter=QuotaLimiter(
+            [
+                RateLimitRule(settings.ask_rate_limit_per_minute, 60.0),
+                RateLimitRule(settings.ask_rate_limit_per_day, 86_400.0),
+            ],
+            global_rules=[
+                RateLimitRule(settings.ask_global_rate_limit_per_minute, 60.0),
+                RateLimitRule(settings.ask_global_rate_limit_per_day, 86_400.0),
+            ],
+        ),
     )
 
 

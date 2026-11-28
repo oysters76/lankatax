@@ -1,10 +1,11 @@
-"""Answer tax questions with retrieval-augmented generation."""
+"""Answer tax questions with retrieval-augmented generation.
+
+The endpoint is public; anonymous callers are rate limited per client address.
+"""
 
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
 from lankatax_ai.backend.api.deps import ApiDepsDep
 from lankatax_ai.backend.api.schemas import (
@@ -13,7 +14,6 @@ from lankatax_ai.backend.api.schemas import (
     AskUsageSchema,
     CitationSchema,
 )
-from lankatax_ai.backend.api.security import Principal, require_access
 from lankatax_ai.backend.api.utils import link
 from lankatax_ai.backend.services.ask import AskOutcome, AskRequest
 from lankatax_ai.backend.services.ask import ask as run_ask
@@ -60,14 +60,14 @@ def _response(request: Request, outcome: AskOutcome) -> AskResponse:
 async def ask(
     request: Request,
     payload: AskRequestSchema,
-    principal: Annotated[Principal, Depends(require_access)],
     deps: ApiDepsDep,
 ) -> AskResponse:
+    client_key = request.client.host if request.client is not None else "anonymous"
     outcome = await run_ask(
         AskRequest(
             question=payload.question,
             conversation_id=payload.conversation_id,
-            requested_by=principal.username,
+            fingerprint=client_key,
         ),
         deps=deps.ask,
     )

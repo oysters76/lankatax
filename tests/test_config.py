@@ -66,12 +66,20 @@ def test_ask_settings_are_read(monkeypatch):
     monkeypatch.setenv("ASK_TOP_K", "9")
     monkeypatch.setenv("ASK_GUARD_OUTPUT", "false")
     monkeypatch.setenv("ASK_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("ASK_RATE_LIMIT_PER_MINUTE", "3")
+    monkeypatch.setenv("ASK_RATE_LIMIT_PER_DAY", "30")
+    monkeypatch.setenv("ASK_GLOBAL_RATE_LIMIT_PER_MINUTE", "90")
+    monkeypatch.setenv("ASK_GLOBAL_RATE_LIMIT_PER_DAY", "900")
 
     settings = _load()
 
     assert settings.ask_top_k == 9
     assert settings.ask_guard_output is False
     assert settings.ask_llm_provider.value == "gemini"
+    assert settings.ask_rate_limit_per_minute == 3
+    assert settings.ask_rate_limit_per_day == 30
+    assert settings.ask_global_rate_limit_per_minute == 90
+    assert settings.ask_global_rate_limit_per_day == 900
 
 
 def test_langsmith_names_are_read(monkeypatch):

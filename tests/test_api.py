@@ -93,7 +93,6 @@ EXPECTED_ACTIONS = {
 #: Job, scrape, ingest and refresh routes; all of them require a bearer token.
 #: They replaced the 501 stubs, so the stub test became this missing-token check.
 PROTECTED_ROUTES = [
-    ("POST", ASK_URL),
     ("POST", INGEST_URL),
     ("GET", f"{INGEST_URL}/status"),
     ("GET", f"{SCRAPE_URL}/urls"),
@@ -449,7 +448,8 @@ def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
         "jobs",
     ):
         assert links[key]["available"] is True
-    for key in ("ask", "search", "stats", "cache_stats", "ingest", "jobs", "docs"):
+    assert links["ask"]["auth_required"] is False
+    for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
     assert links["cache_clear"]["method"] == "DELETE"
     assert links["cache_expire"]["method"] == "POST"
@@ -532,12 +532,10 @@ def test_protected_routes_need_a_token(client: TestClient, method: str, path: st
     assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_ask_returns_an_answer_with_citations(client: TestClient) -> None:
-    token = _login(client)
-
-    response = client.post(
-        ASK_URL, json={"question": "How is PAYE withheld?"}, headers=_auth(token)
-    )
+def test_ask_is_public_and_returns_an_answer_with_citations(
+    client: TestClient,
+) -> None:
+    response = client.post(ASK_URL, json={"question": "How is PAYE withheld?"})
 
     assert response.status_code == 200
     body = response.json()
@@ -564,9 +562,8 @@ def test_ask_refusal_is_a_200_with_a_reason() -> None:
     )
     harness = _harness(ask_graph=graph)
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
-    token = _login(client)
 
-    response = client.post(ASK_URL, json={"question": "Weather?"}, headers=_auth(token))
+    response = client.post(ASK_URL, json={"question": "Weather?"})
 
     assert response.status_code == 200
     body = response.json()
@@ -576,9 +573,14 @@ def test_ask_refusal_is_a_200_with_a_reason() -> None:
 
 
 def test_ask_rejects_a_blank_question(client: TestClient) -> None:
-    token = _login(client)
+    response = client.post(ASK_URL, json={"question": "   "})
 
-    response = client.post(ASK_URL, json={"question": "   "}, headers=_auth(token))
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+def test_ask_rejects_client_supplied_fingerprints(client: TestClient) -> None:
+    response = client.post(ASK_URL, json={"question": "PAYE?", "fingerprint": "spoof"})
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
@@ -587,10 +589,9 @@ def test_ask_rejects_a_blank_question(client: TestClient) -> None:
 def test_ask_rate_limit_returns_retry_after() -> None:
     harness = _harness(ask_limiter=RateLimiter(limit=1))
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
-    token = _login(client)
 
-    first = client.post(ASK_URL, json={"question": "first"}, headers=_auth(token))
-    second = client.post(ASK_URL, json={"question": "second"}, headers=_auth(token))
+    first = client.post(ASK_URL, json={"question": "first"})
+    second = client.post(ASK_URL, json={"question": "second"})
 
     assert first.status_code == 200
     assert second.status_code == 429
@@ -601,9 +602,8 @@ def test_ask_rate_limit_returns_retry_after() -> None:
 def test_ask_maps_upstream_failures_to_502() -> None:
     harness = _harness(ask_graph=_FailingGraph())
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
-    token = _login(client)
 
-    response = client.post(ASK_URL, json={"question": "PAYE?"}, headers=_auth(token))
+    response = client.post(ASK_URL, json={"question": "PAYE?"})
 
     assert response.status_code == 502
     assert response.json()["code"] == "upstream_error"
@@ -616,12 +616,10 @@ def test_ask_continues_an_existing_conversation() -> None:
     graph = _FakeAnswerGraph()
     harness = _harness(ask_store=store, ask_graph=graph)
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
-    token = _login(client)
 
     response = client.post(
         ASK_URL,
         json={"question": "follow-up", "conversation_id": conversation_id},
-        headers=_auth(token),
     )
 
     assert response.status_code == 200
@@ -630,12 +628,9 @@ def test_ask_continues_an_existing_conversation() -> None:
 
 
 def test_ask_unknown_conversation_is_not_found(client: TestClient) -> None:
-    token = _login(client)
-
     response = client.post(
         ASK_URL,
         json={"question": "PAYE?", "conversation_id": "not-a-uuid"},
-        headers=_auth(token),
     )
 
     assert response.status_code == 404

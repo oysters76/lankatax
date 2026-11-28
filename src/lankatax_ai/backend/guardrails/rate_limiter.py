@@ -1,4 +1,4 @@
-"""Per-key sliding-window rate limiting.
+"""Per-key sliding-window rate limiting, optionally with global quotas.
 
 The limiter is in-process. That is enough for a single worker and keeps the
 service dependency-free; a shared store can replace the counters when the API
@@ -8,14 +8,15 @@ runs behind multiple replicas.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from lankatax_ai.backend.guardrails import limits
 from lankatax_ai.backend.services.errors import RateLimitError
 
-__all__ = ["RateLimiter"]
+__all__ = ["QuotaLimiter", "RateLimitRule", "RateLimiter"]
 
 
 class RateLimiter:
@@ -52,3 +53,80 @@ class RateLimiter:
                     retry_after=retry_after,
                 )
             hits.append(now)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RateLimitRule:
+    """One quota: at most ``limit`` requests per ``window_seconds``."""
+
+    limit: int
+    window_seconds: float
+
+    def __post_init__(self) -> None:
+        if self.limit < 1:
+            raise ValueError("limit must be at least 1")
+        if self.window_seconds <= 0:
+            raise ValueError("window_seconds must be positive")
+
+
+class QuotaLimiter:
+    """Enforce several windows per caller plus several windows globally.
+
+    A request must satisfy every rule. Rejected requests do not consume quota,
+    so a caller blocked by a daily cap cannot keep extending a short window.
+    """
+
+    def __init__(
+        self,
+        rules: Sequence[RateLimitRule],
+        *,
+        global_rules: Sequence[RateLimitRule] = (),
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._rules = tuple(rules)
+        self._global_rules = tuple(global_rules)
+        self._clock = clock
+        self._hits: dict[tuple[str, int], deque[float]] = defaultdict(deque)
+        self._global_hits: dict[int, deque[float]] = defaultdict(deque)
+        self._lock = asyncio.Lock()
+
+    async def check(self, key: str) -> None:
+        """Record a request for ``key`` or raise :class:`RateLimitError`."""
+        now = self._clock()
+        async with self._lock:
+            waits = self._waits(
+                [self._hits[(key, index)] for index in range(len(self._rules))],
+                self._rules,
+                now,
+            )
+            waits.extend(
+                self._waits(
+                    [self._global_hits[index] for index in range(len(self._global_rules))],
+                    self._global_rules,
+                    now,
+                )
+            )
+            if waits:
+                retry_after = max(waits)
+                raise RateLimitError(
+                    f"Too many questions; retry in about {retry_after} seconds",
+                    retry_after=retry_after,
+                )
+            for index, _rule in enumerate(self._rules):
+                self._hits[(key, index)].append(now)
+            for index, _rule in enumerate(self._global_rules):
+                self._global_hits[index].append(now)
+
+    @staticmethod
+    def _waits(
+        buckets: Sequence[deque[float]],
+        rules: Sequence[RateLimitRule],
+        now: float,
+    ) -> list[int]:
+        waits: list[int] = []
+        for bucket, rule in zip(buckets, rules, strict=True):
+            while bucket and now - bucket[0] >= rule.window_seconds:
+                bucket.popleft()
+            if len(bucket) >= rule.limit:
+                waits.append(max(1, int(rule.window_seconds - (now - bucket[0]))))
+        return waits

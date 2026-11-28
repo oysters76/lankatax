@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 #: Routes that do not need a bearer token.
-PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token"})
+PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token", "ask"})
 
 #: Documentation routes, guarded by their own setting.
 DOCS_ROUTES: frozenset[str] = frozenset({"swagger_ui_html", "redoc_html", "openapi"})

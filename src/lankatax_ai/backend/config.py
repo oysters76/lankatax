@@ -121,7 +121,10 @@ class Settings(BaseSettings):
     ask_guard_input: bool = True
     ask_guard_output: bool = True
     ask_timeout_seconds: float = Field(60.0, gt=0)
-    ask_rate_limit_per_minute: int = Field(20, ge=1)
+    ask_rate_limit_per_minute: int = Field(5, ge=1)
+    ask_rate_limit_per_day: int = Field(50, ge=1)
+    ask_global_rate_limit_per_minute: int = Field(60, ge=1)
+    ask_global_rate_limit_per_day: int = Field(1000, ge=1)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
