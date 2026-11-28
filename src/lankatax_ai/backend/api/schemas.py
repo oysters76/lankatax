@@ -25,6 +25,7 @@ __all__ = [
     "ErrorBody",
     "Health",
     "Hypermedia",
+    "JobActionSchema",
     "JobDetailsSchema",
     "JobListSchema",
     "JobReceiptSchema",
@@ -220,5 +221,11 @@ class JobReceiptSchema(Hypermedia):
     reused: bool
 
 
+class JobActionSchema(Hypermedia):
+    run_id: str
+    action: Literal["cancel", "replay"]
+
+
 class JobListSchema(Hypermedia):
     items: list[JobSummarySchema]
+    next: Link | None = None

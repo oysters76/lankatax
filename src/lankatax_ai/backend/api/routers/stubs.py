@@ -117,19 +117,3 @@ async def scrape_status(request: Request) -> JSONResponse:
         scrape="scrape",
         scrape_urls="scrape_urls",
     )
-
-
-@router.get(
-    "/api/v1/jobs",
-    summary="Scheduled jobs (not implemented yet)",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    dependencies=_PROTECTED,
-)
-async def jobs(request: Request) -> JSONResponse:
-    return not_implemented(
-        request,
-        name="jobs",
-        phase=_JOB_PHASE,
-        scrape="scrape",
-        ingest="ingest",
-    )

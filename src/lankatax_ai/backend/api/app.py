@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI
 
 from lankatax_ai.backend.api.deps import ApiDeps, build_api_deps
 from lankatax_ai.backend.api.errors import install_error_handlers
-from lankatax_ai.backend.api.routers import auth, cache, docs, root, search, stats, stubs
+from lankatax_ai.backend.api.routers import auth, cache, docs, jobs, root, search, stats, stubs
 from lankatax_ai.backend.api.security import AuthConfig, require_access
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.db.session import dispose_engine
@@ -64,6 +64,7 @@ def create_app(
     app.include_router(search.router)
     app.include_router(stats.router)
     app.include_router(cache.router)
+    app.include_router(jobs.router)
     app.include_router(stubs.router)
     app.include_router(
         docs.router,

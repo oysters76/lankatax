@@ -85,7 +85,7 @@ async def api_root(request: Request) -> ApiRoot:
             "scrape_status": link(
                 request, "scrape_status", title="Scrape status (not implemented yet)"
             ),
-            "jobs": link(request, "jobs", title="Scheduled jobs (not implemented yet)"),
+            "jobs": link(request, "jobs", title="Job runs and schedules"),
             "health": link(request, "health"),
             "docs": link(request, "swagger_ui_html", title="Swagger UI"),
         },

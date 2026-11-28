@@ -80,7 +80,6 @@ PROTECTED_STUBS = [
     ("GET", "/api/v1/scrape/urls"),
     ("POST", "/api/v1/scrape"),
     ("GET", "/api/v1/scrape/status"),
-    ("GET", "/api/v1/jobs"),
 ]
 
 
@@ -335,9 +334,9 @@ def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
         "scrape",
         "scrape_urls",
         "scrape_status",
-        "jobs",
     ):
         assert links[key]["available"] is False
+    assert links["jobs"]["available"] is True
     assert links["ask"]["auth_required"] is False
     for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
@@ -531,3 +530,54 @@ def test_cache_mutations_report_counts(client: TestClient) -> None:
     assert cleared.json()["deleted"] == 7
     assert expired.json()["deleted"] == 2
     assert "cache_stats" in cleared.json()["links"]
+
+
+def test_jobs_require_authentication(client: TestClient) -> None:
+    assert client.post("/api/v1/jobs", json={"type": "pipeline.refresh"}).status_code == 401
+    assert client.get("/api/v1/jobs").status_code == 401
+
+
+def test_enqueue_job_returns_location(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={"type": "pipeline.refresh", "params": {"full": True}},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 202
+    assert response.headers["location"].endswith("/api/v1/jobs/run-1")
+    assert response.json()["run_id"] == "run-1"
+    assert response.json()["reused"] is False
+
+
+def test_list_jobs_returns_an_empty_page(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.get("/api/v1/jobs", headers=_auth(token))
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["links"]["self"]["href"].endswith("/api/v1/jobs")
+
+
+def test_job_detail_maps_not_found(client: TestClient) -> None:
+    token = _login(client)
+
+    response = client.get("/api/v1/jobs/missing", headers=_auth(token))
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+def test_job_cancel_and_replay_return_actions(client: TestClient) -> None:
+    token = _login(client)
+
+    cancelled = client.post("/api/v1/jobs/run-1/cancel", headers=_auth(token))
+    replayed = client.post("/api/v1/jobs/run-1/replay", headers=_auth(token))
+
+    assert cancelled.status_code == 202
+    assert cancelled.json()["action"] == "cancel"
+    assert replayed.status_code == 202
+    assert replayed.json()["action"] == "replay"

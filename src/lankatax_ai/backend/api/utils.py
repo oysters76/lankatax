@@ -48,7 +48,6 @@ STUB_ROUTES: frozenset[str] = frozenset(
         "scrape",
         "scrape_urls",
         "scrape_status",
-        "jobs",
     }
 )
 
