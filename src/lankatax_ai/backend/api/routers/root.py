@@ -64,26 +64,16 @@ async def api_root(request: Request) -> ApiRoot:
             "cache_expire": link(
                 request, "cache_expire", method="POST", title="Expire stale entries"
             ),
-            "ingest": link(
+            "ingest": link(request, "ingest", method="POST", title="Ingest documents"),
+            "ingest_status": link(request, "ingest_status", title="Ingestion status"),
+            "scrape": link(request, "scrape", method="POST", title="Scrape the registry"),
+            "scrape_urls": link(request, "scrape_urls", title="Registry entries"),
+            "scrape_status": link(request, "scrape_status", title="Scrape status"),
+            "pipeline_refresh": link(
                 request,
-                "ingest",
+                "pipeline_refresh",
                 method="POST",
-                title="Ingest documents (not implemented yet)",
-            ),
-            "ingest_status": link(
-                request, "ingest_status", title="Ingest status (not implemented yet)"
-            ),
-            "scrape": link(
-                request,
-                "scrape",
-                method="POST",
-                title="Scrape the registry (not implemented yet)",
-            ),
-            "scrape_urls": link(
-                request, "scrape_urls", title="Registry entries (not implemented yet)"
-            ),
-            "scrape_status": link(
-                request, "scrape_status", title="Scrape status (not implemented yet)"
+                title="Refresh the corpus",
             ),
             "jobs": link(request, "jobs", title="Job runs and schedules"),
             "health": link(request, "health"),

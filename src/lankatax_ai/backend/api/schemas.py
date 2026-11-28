@@ -9,7 +9,7 @@ in ``utils.py``.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -25,6 +25,8 @@ __all__ = [
     "ErrorBody",
     "Health",
     "Hypermedia",
+    "IngestRequest",
+    "IngestStatusSchema",
     "JobActionSchema",
     "JobDetailsSchema",
     "JobListSchema",
@@ -33,6 +35,11 @@ __all__ = [
     "JobSummarySchema",
     "JobTaskSchema",
     "Link",
+    "PipelineRefreshRequest",
+    "RegistryEntrySchema",
+    "RegistrySchema",
+    "ScrapeRequest",
+    "ScrapeStatusSchema",
     "SearchRequest",
     "SearchResponse",
     "SearchResultItem",
@@ -229,3 +236,53 @@ class JobActionSchema(Hypermedia):
 class JobListSchema(Hypermedia):
     items: list[JobSummarySchema]
     next: Link | None = None
+
+
+class ScrapeRequest(BaseModel):
+    idempotency_key: str | None = Field(None, max_length=200)
+    full: bool = False
+    discover_pdfs: bool = True
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
+
+
+class IngestRequest(BaseModel):
+    idempotency_key: str | None = Field(None, max_length=200)
+    target: Literal["pending", "all"] = "pending"
+    document_id: UUID | None = None
+    max_documents: Annotated[int | None, Field(ge=1)] = None
+    max_tokens: Annotated[int | None, Field(ge=1)] = None
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
+
+
+class PipelineRefreshRequest(BaseModel):
+    idempotency_key: str | None = Field(None, max_length=200)
+    full: bool = False
+    discover_pdfs: bool = True
+    target: Literal["pending", "all"] = "pending"
+    max_documents: Annotated[int | None, Field(ge=1)] = None
+    max_tokens: Annotated[int | None, Field(ge=1)] = None
+    batch_size: Annotated[int, Field(ge=1, le=100)] = 25
+
+
+class ScrapeStatusSchema(Hypermedia):
+    total: int
+    recent: int
+    first_scrape: datetime | None
+    last_scrape: datetime | None
+
+
+class IngestStatusSchema(Hypermedia):
+    total_documents: int
+    pending: int
+    ingested: int
+
+
+class RegistryEntrySchema(Hypermedia):
+    url: str
+    category: str
+    label: str
+    kind: str
+
+
+class RegistrySchema(Hypermedia):
+    items: list[RegistryEntrySchema]

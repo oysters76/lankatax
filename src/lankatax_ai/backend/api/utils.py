@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from lankatax_ai.backend.api.schemas import (
     ErrorBody,
+    JobReceiptSchema,
     Link,
     SearchRequest,
     SearchResponse,
@@ -22,6 +23,7 @@ from lankatax_ai.backend.api.schemas import (
 )
 from lankatax_ai.backend.rag.metadata_filter import MetadataFilters
 from lankatax_ai.backend.rag.types import RetrievalResult
+from lankatax_ai.backend.services.jobs import JobReceipt
 from lankatax_ai.backend.services.search import SearchOptions, SearchOutcome
 from lankatax_ai.backend.types import SearchSource
 
@@ -30,6 +32,7 @@ __all__ = [
     "PUBLIC_ROUTES",
     "STUB_ROUTES",
     "error_payload",
+    "job_receipt_response",
     "link",
     "not_implemented",
     "to_search_options",
@@ -40,16 +43,7 @@ __all__ = [
 PUBLIC_ROUTES: frozenset[str] = frozenset({"root", "health", "api_root", "token", "ask"})
 
 #: Declared routes that still answer 501.
-STUB_ROUTES: frozenset[str] = frozenset(
-    {
-        "ask",
-        "ingest",
-        "ingest_status",
-        "scrape",
-        "scrape_urls",
-        "scrape_status",
-    }
-)
+STUB_ROUTES: frozenset[str] = frozenset({"ask"})
 
 #: Documentation routes, guarded by their own setting.
 DOCS_ROUTES: frozenset[str] = frozenset({"swagger_ui_html", "redoc_html", "openapi"})
@@ -74,6 +68,24 @@ def link(
         title=title,
         available=name not in STUB_ROUTES,
         auth_required=auth_required,
+    )
+
+
+def job_receipt_response(request: Request, receipt: JobReceipt) -> JSONResponse:
+    """Render an accepted job with Location and idempotent-replay headers."""
+    detail = link(request, "job_detail", run_id=receipt.run_id)
+    body = JobReceiptSchema(
+        run_id=receipt.run_id,
+        reused=receipt.reused,
+        links={"self": detail, "api_root": link(request, "api_root")},
+    )
+    headers = {"Location": detail.href}
+    if receipt.reused:
+        headers["Idempotent-Replayed"] = "true"
+    return JSONResponse(
+        status_code=202,
+        content=body.model_dump(mode="json"),
+        headers=headers,
     )
 
 

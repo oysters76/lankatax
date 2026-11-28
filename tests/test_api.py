@@ -26,9 +26,12 @@ from lankatax_ai.backend.api.deps import ApiDeps
 from lankatax_ai.backend.api.security import AuthConfig
 from lankatax_ai.backend.cache.types import CacheStats
 from lankatax_ai.backend.config import Settings
+from lankatax_ai.backend.documents import ScrapeStatusRecord
+from lankatax_ai.backend.ingestion.types import EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.cache import CacheDeps
 from lankatax_ai.backend.services.errors import NotFoundError
+from lankatax_ai.backend.services.ingest import IngestDeps
 from lankatax_ai.backend.services.jobs import (
     JobDeps,
     JobDetails,
@@ -38,6 +41,7 @@ from lankatax_ai.backend.services.jobs import (
     JobStatus,
     JobSummary,
 )
+from lankatax_ai.backend.services.scrape import ScrapeDeps
 from lankatax_ai.backend.services.search import SearchDeps
 from lankatax_ai.backend.services.stats import StatsDeps
 from lankatax_ai.backend.types import SearchMode, SearchSource
@@ -69,18 +73,13 @@ EXPECTED_ACTIONS = {
     "scrape",
     "scrape_urls",
     "scrape_status",
+    "pipeline_refresh",
     "jobs",
     "health",
     "docs",
 }
 
-PROTECTED_STUBS = [
-    ("POST", "/api/v1/ingest"),
-    ("GET", "/api/v1/ingest/status"),
-    ("GET", "/api/v1/scrape/urls"),
-    ("POST", "/api/v1/scrape"),
-    ("GET", "/api/v1/scrape/status"),
-]
+PROTECTED_STUBS: list[tuple[str, str]] = []
 
 
 class _FakeSession:
@@ -191,6 +190,29 @@ class _FakeCacheAdmin:
         return 2
 
 
+class _FakeRegistry:
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+
+    def get_all(self) -> list:
+        return []
+
+
+class _FakeScrapeStore:
+    async def scrape_status(self) -> ScrapeStatusRecord:
+        now = datetime.now(UTC)
+        return ScrapeStatusRecord(total=2, recent=1, first_scrape=now, last_scrape=now)
+
+
+class _FakeIngestRepository:
+    async def status(self) -> IngestionStatus:
+        return IngestionStatus(total_documents=3, pending=1, ingested=2)
+
+
+async def _fake_finalizer(run_id: str | None = None) -> int:
+    return 1
+
+
 class _FakeJobGateway:
     async def enqueue(self, request: JobRequest) -> JobReceipt:
         return JobReceipt(run_id="run-1")
@@ -239,6 +261,17 @@ def _harness(
         ),
         cache=CacheDeps(admin_factory=lambda session: _FakeCacheAdmin()),
         jobs=JobDeps(gateway=_FakeJobGateway()),
+        scrape=ScrapeDeps(
+            registry=_FakeRegistry(),  # type: ignore[arg-type]
+            crawler_factory=lambda: None,  # type: ignore[arg-type,return-value]
+            store_factory=lambda _session: _FakeScrapeStore(),  # type: ignore[arg-type]
+        ),
+        ingest=IngestDeps(
+            repository_factory=lambda _session: _FakeIngestRepository(),  # type: ignore[arg-type]
+            embeddings=_FakeEmbeddings(),
+            embedding_policy=EmbeddingPolicy(),
+            corpus_finalizer=_fake_finalizer,
+        ),
         auth=AUTH,
     )
     return _Harness(deps=deps, analytics=analytics)
@@ -327,16 +360,17 @@ def test_api_root_advertises_every_action(client: TestClient) -> None:
 def test_api_root_marks_stubs_and_guarded_links(client: TestClient) -> None:
     links = client.get("/api/v1").json()["links"]
 
+    assert links["ask"]["available"] is False
     for key in (
-        "ask",
         "ingest",
         "ingest_status",
         "scrape",
         "scrape_urls",
         "scrape_status",
+        "pipeline_refresh",
+        "jobs",
     ):
-        assert links[key]["available"] is False
-    assert links["jobs"]["available"] is True
+        assert links[key]["available"] is True
     assert links["ask"]["auth_required"] is False
     for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
@@ -581,3 +615,52 @@ def test_job_cancel_and_replay_return_actions(client: TestClient) -> None:
     assert cancelled.json()["action"] == "cancel"
     assert replayed.status_code == 202
     assert replayed.json()["action"] == "replay"
+
+
+def test_scrape_and_pipeline_endpoints_enqueue_jobs(client: TestClient) -> None:
+    token = _login(client)
+
+    scraped = client.post(
+        "/api/v1/scrape",
+        json={"full": True, "idempotency_key": "scrape-1"},
+        headers=_auth(token),
+    )
+    refreshed = client.post(
+        "/api/v1/pipeline/refresh",
+        json={"target": "pending", "max_tokens": 1000},
+        headers=_auth(token),
+    )
+
+    assert scraped.status_code == 202
+    assert scraped.headers["location"].endswith("/api/v1/jobs/run-1")
+    assert refreshed.status_code == 202
+
+
+def test_ingest_endpoints_enqueue_pending_or_document(client: TestClient) -> None:
+    token = _login(client)
+    document_id = uuid4()
+
+    pending = client.post("/api/v1/ingest", json={}, headers=_auth(token))
+    document = client.post(
+        "/api/v1/ingest",
+        json={"document_id": str(document_id)},
+        headers=_auth(token),
+    )
+
+    assert pending.status_code == 202
+    assert document.status_code == 202
+
+
+def test_scrape_and_ingest_status_endpoints(client: TestClient) -> None:
+    token = _login(client)
+
+    scrape = client.get("/api/v1/scrape/status", headers=_auth(token))
+    ingest = client.get("/api/v1/ingest/status", headers=_auth(token))
+    urls = client.get("/api/v1/scrape/urls", headers=_auth(token))
+
+    assert scrape.status_code == 200
+    assert scrape.json()["total"] == 2
+    assert ingest.status_code == 200
+    assert ingest.json()["total_documents"] == 3
+    assert urls.status_code == 200
+    assert urls.json()["items"] == []
