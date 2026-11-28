@@ -21,7 +21,13 @@ from lankatax_ai.backend.services.ask.types import (
     AskUsage,
     Citation,
 )
-from lankatax_ai.backend.services.errors import UpstreamError, ValidationError
+from lankatax_ai.backend.services.errors import (
+    GatewayTimeoutError,
+    RateLimitError,
+    ServiceError,
+    UpstreamError,
+    ValidationError,
+)
 
 __all__ = ["ask"]
 
@@ -38,6 +44,8 @@ async def ask(request: AskRequest, *, deps: AskDeps) -> AskOutcome:
         raise ValidationError("Question must not be empty")
 
     owner = request.requested_by or request.fingerprint or _ANONYMOUS
+    # Quota first: it protects conversation lookups and the LLM, so even an
+    # invalid conversation id costs the caller a request.
     await deps.rate_limiter.check(owner)
 
     conversation_id = request.conversation_id
@@ -45,7 +53,7 @@ async def ask(request: AskRequest, *, deps: AskDeps) -> AskOutcome:
         conversation_id = await deps.conversation_store.create(fingerprint=owner)
 
     history = await deps.conversation_store.load(
-        conversation_id, limit=request.options.memory_turns
+        conversation_id, limit=request.options.memory_turns, owner=owner
     )
 
     graph = deps.graph_factory(request.options)
@@ -58,11 +66,26 @@ async def ask(request: AskRequest, *, deps: AskDeps) -> AskOutcome:
         "timings": {},
     }
 
+    if deps.slots is not None and deps.slots.locked():
+        raise RateLimitError(
+            "The answer service is busy; retry shortly",
+            retry_after=5,
+        )
+
     try:
         async with asyncio.timeout(settings.ask_timeout_seconds):
-            state = dict(await graph.ainvoke(initial))
+            if deps.slots is None:
+                state = dict(await graph.ainvoke(initial))
+            else:
+                async with deps.slots:
+                    state = dict(await graph.ainvoke(initial))
     except TimeoutError as error:
-        raise UpstreamError("The answer took too long to generate") from error
+        raise GatewayTimeoutError("The answer took too long to generate") from error
+    except ServiceError:
+        raise
+    except Exception as error:
+        logger.exception("Ask graph failed")
+        raise UpstreamError("The answer provider failed") from error
 
     refused = bool(state.get("refused"))
     answer = str(state.get("answer") or "")
@@ -96,6 +119,7 @@ async def ask(request: AskRequest, *, deps: AskDeps) -> AskOutcome:
                     sources=tuple(_source(citation) for citation in citations),
                 ),
             ],
+            owner=owner,
         )
 
     record_ask(outcome)
@@ -119,7 +143,7 @@ def _resolve_citations(
                 chunk_id=str(result.chunk_id),
                 document_id=str(result.document_id),
                 title=str(result.metadata.get("document_title") or "Untitled"),
-                url=result.metadata.get("from_url"),
+                url=_metadata_url(result.metadata),
                 snippet=result.content[:280],
                 score=result.score,
             )
@@ -127,6 +151,11 @@ def _resolve_citations(
         seen.add(number)
 
     return tuple(citations)
+
+
+def _metadata_url(metadata: dict[str, object]) -> str | None:
+    value = metadata.get("url") or metadata.get("from_url")
+    return value if isinstance(value, str) else None
 
 
 def _cited_numbers(state: dict[str, object]) -> list[int]:

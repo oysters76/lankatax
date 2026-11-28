@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.services.jobs import JobStatus, JobType, JsonObject
@@ -296,13 +296,22 @@ class RegistrySchema(Hypermedia):
 class AskRequestSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    question: str = Field(min_length=1, max_length=settings.ask_max_question_chars)
-    conversation_id: str | None = Field(None, max_length=64)
+    question: str = Field(min_length=1)
+    conversation_id: UUID | None = None
+
+    @field_validator("question")
+    @classmethod
+    def _question_within_limit(cls, value: str) -> str:
+        if len(value) > settings.ask_max_question_chars:
+            raise ValueError(
+                f"question must be at most {settings.ask_max_question_chars} characters"
+            )
+        return value
 
 
 class CitationSchema(BaseModel):
-    chunk_id: str
-    document_id: str
+    chunk_id: UUID
+    document_id: UUID
     title: str
     url: str | None = None
     snippet: str

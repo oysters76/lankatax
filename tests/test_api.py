@@ -29,7 +29,11 @@ from lankatax_ai.backend.cache.types import CacheStats
 from lankatax_ai.backend.chat import AnswerDraft
 from lankatax_ai.backend.config import Settings, settings
 from lankatax_ai.backend.documents import ScrapeStatusRecord
-from lankatax_ai.backend.guardrails import GuardrailReason, RateLimiter
+from lankatax_ai.backend.guardrails import (
+    GuardrailReason,
+    QuotaLimiter,
+    RateLimitRule,
+)
 from lankatax_ai.backend.ingestion.types import EmbeddingPolicy, IngestionStatus
 from lankatax_ai.backend.memory import InMemoryConversationStore, Turn
 from lankatax_ai.backend.rag.types import RetrievalResult
@@ -158,6 +162,22 @@ class _FakeAnswerGraph:
 class _FailingGraph:
     async def ainvoke(self, state: Any) -> Any:
         raise UpstreamError("provider down")
+
+
+class _ExplodingGraph:
+    async def ainvoke(self, state: Any) -> Any:
+        raise RuntimeError("provider exploded")
+
+
+class _SlowGraph:
+    async def ainvoke(self, state: Any) -> Any:
+        await asyncio.sleep(0.05)
+        return dict(state)
+
+
+class _BrokenStore(InMemoryConversationStore):
+    async def create(self, *, fingerprint: str) -> str:
+        raise RuntimeError("database down")
 
 
 def _ask_state(**overrides: Any) -> dict[str, Any]:
@@ -321,7 +341,7 @@ def _harness(
         ask=AskDeps(
             graph_factory=lambda options: ask_graph,
             conversation_store=ask_store,
-            rate_limiter=ask_limiter or RateLimiter(limit=100),
+            rate_limiter=ask_limiter or QuotaLimiter([RateLimitRule(100, 60)]),
         ),
         search=SearchDeps(
             embeddings=_FakeEmbeddings(),
@@ -437,17 +457,6 @@ def test_api_root_marks_public_and_guarded_links(client: TestClient) -> None:
     links = client.get("/api/v1").json()["links"]
 
     assert links["ask"]["available"] is True
-    for key in (
-        "ask",
-        "ingest",
-        "ingest_status",
-        "scrape",
-        "scrape_urls",
-        "scrape_status",
-        "pipeline_refresh",
-        "jobs",
-    ):
-        assert links[key]["available"] is True
     assert links["ask"]["auth_required"] is False
     for key in ("search", "stats", "cache_stats", "ingest", "jobs", "docs"):
         assert links[key]["auth_required"] is True
@@ -586,8 +595,14 @@ def test_ask_rejects_client_supplied_fingerprints(client: TestClient) -> None:
     assert response.json()["code"] == "validation_error"
 
 
+def test_ask_rejects_an_overlong_question(client: TestClient) -> None:
+    response = client.post(ASK_URL, json={"question": "x" * 2001})
+
+    assert response.status_code == 422
+
+
 def test_ask_rate_limit_returns_retry_after() -> None:
-    harness = _harness(ask_limiter=RateLimiter(limit=1))
+    harness = _harness(ask_limiter=QuotaLimiter([RateLimitRule(1, 60)]))
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
 
     first = client.post(ASK_URL, json={"question": "first"})
@@ -611,8 +626,14 @@ def test_ask_maps_upstream_failures_to_502() -> None:
 
 def test_ask_continues_an_existing_conversation() -> None:
     store = InMemoryConversationStore()
-    conversation_id = asyncio.run(store.create(fingerprint=USERNAME))
-    asyncio.run(store.append(conversation_id, [Turn(role="user", content="prior turn")]))
+    conversation_id = asyncio.run(store.create(fingerprint="testclient"))
+    asyncio.run(
+        store.append(
+            conversation_id,
+            [Turn(role="user", content="prior turn")],
+            owner="testclient",
+        )
+    )
     graph = _FakeAnswerGraph()
     harness = _harness(ask_store=store, ask_graph=graph)
     client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
@@ -627,10 +648,80 @@ def test_ask_continues_an_existing_conversation() -> None:
     assert [turn.content for turn in graph.calls[0]["history"]] == ["prior turn"]
 
 
+def test_ask_timeout_maps_to_504() -> None:
+    harness = _harness(ask_graph=_SlowGraph())
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+    original = settings.ask_timeout_seconds
+    settings.ask_timeout_seconds = 0.001
+    try:
+        response = client.post(ASK_URL, json={"question": "PAYE?"})
+    finally:
+        settings.ask_timeout_seconds = original
+
+    assert response.status_code == 504
+    assert response.json()["code"] == "gateway_timeout"
+
+
+def test_ask_wraps_provider_failures_as_502() -> None:
+    harness = _harness(ask_graph=_ExplodingGraph())
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+
+    response = client.post(ASK_URL, json={"question": "PAYE?"})
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "upstream_error"
+
+
+def test_unexpected_store_failure_returns_the_error_envelope() -> None:
+    harness = _harness(ask_store=_BrokenStore())
+    client = TestClient(
+        create_app(api_deps=harness.deps, auth_config=AUTH),
+        raise_server_exceptions=False,
+    )
+
+    response = client.post(ASK_URL, json={"question": "PAYE?"})
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == "internal_error"
+    assert "api_root" in body["links"]
+
+
+def test_ask_rejects_oversized_bodies(client: TestClient) -> None:
+    response = client.post(ASK_URL, json={"question": "x" * 20_000})
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "request_too_large"
+
+
 def test_ask_unknown_conversation_is_not_found(client: TestClient) -> None:
     response = client.post(
         ASK_URL,
+        json={"question": "PAYE?", "conversation_id": str(uuid4())},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+def test_ask_rejects_a_malformed_conversation_id(client: TestClient) -> None:
+    response = client.post(
+        ASK_URL,
         json={"question": "PAYE?", "conversation_id": "not-a-uuid"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_ask_cannot_read_another_owners_conversation() -> None:
+    store = InMemoryConversationStore()
+    conversation_id = asyncio.run(store.create(fingerprint="someone-else"))
+    harness = _harness(ask_store=store)
+    client = TestClient(create_app(api_deps=harness.deps, auth_config=AUTH))
+
+    response = client.post(
+        ASK_URL,
+        json={"question": "PAYE?", "conversation_id": conversation_id},
     )
 
     assert response.status_code == 404

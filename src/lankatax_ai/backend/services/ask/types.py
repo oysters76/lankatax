@@ -6,6 +6,7 @@ types, and the LangGraph implementation arrives through ``AskDeps``.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
@@ -127,3 +128,4 @@ class AskDeps:
     graph_factory: Callable[[AskOptions], AnswerGraph]
     conversation_store: ConversationStore
     rate_limiter: RateLimiterPort
+    slots: asyncio.Semaphore | None = None

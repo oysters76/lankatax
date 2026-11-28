@@ -6,6 +6,7 @@ resulting ``AskDeps`` to :func:`lankatax_ai.backend.services.ask.service.ask`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
@@ -47,7 +48,8 @@ def build_ask_deps(
     """Wire the production store, limiter and graph factory.
 
     Callers that already built embeddings (the API) pass them in so the process
-    keeps one embedding client and one search wiring.
+    keeps one embedding client and one search wiring. Quotas and slots are
+    in-process: keep a single worker until a shared limiter exists.
     """
     if embeddings is None:
         embeddings = build_embeddings()
@@ -65,6 +67,7 @@ def build_ask_deps(
     return AskDeps(
         graph_factory=graph_factory,
         conversation_store=SqlConversationStore(async_session),
+        slots=asyncio.Semaphore(settings.ask_max_concurrency),
         rate_limiter=QuotaLimiter(
             [
                 RateLimitRule(settings.ask_rate_limit_per_minute, 60.0),

@@ -32,13 +32,13 @@ class SqlConversationStore:
             await session.commit()
         return str(conversation_id)
 
-    async def load(self, conversation_id: str, *, limit: int) -> list[Turn]:
+    async def load(self, conversation_id: str, *, limit: int, owner: str) -> list[Turn]:
         if limit <= 0:
             return []
         session_id = self._parse_id(conversation_id)
         async with self._session_factory() as session:
-            exists = await session.get(ChatSession, session_id)
-            if exists is None:
+            conversation = await session.get(ChatSession, session_id)
+            if conversation is None or conversation.fingerprint != owner:
                 raise NotFoundError("Conversation not found")
             rows = (
                 await session.scalars(
@@ -58,13 +58,13 @@ class SqlConversationStore:
             for row in reversed(rows)
         ]
 
-    async def append(self, conversation_id: str, turns: Sequence[Turn]) -> None:
+    async def append(self, conversation_id: str, turns: Sequence[Turn], *, owner: str) -> None:
         if not turns:
             return
         session_id = self._parse_id(conversation_id)
         async with self._session_factory() as session:
             conversation = await session.get(ChatSession, session_id)
-            if conversation is None:
+            if conversation is None or conversation.fingerprint != owner:
                 raise NotFoundError("Conversation not found")
             # Server defaults share one timestamp per transaction, which would
             # make ordering arbitrary; give each turn a distinct instant.

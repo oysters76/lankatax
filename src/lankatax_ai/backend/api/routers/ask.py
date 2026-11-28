@@ -5,8 +5,11 @@ The endpoint is public; anonymous callers are rate limited per client address.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Request
 
+from lankatax_ai.backend.api.client_ip import resolve_client_ip
 from lankatax_ai.backend.api.deps import ApiDepsDep
 from lankatax_ai.backend.api.schemas import (
     AskRequestSchema,
@@ -15,6 +18,7 @@ from lankatax_ai.backend.api.schemas import (
     CitationSchema,
 )
 from lankatax_ai.backend.api.utils import link
+from lankatax_ai.backend.config import settings
 from lankatax_ai.backend.services.ask import AskOutcome, AskRequest
 from lankatax_ai.backend.services.ask import ask as run_ask
 
@@ -29,8 +33,8 @@ def _response(request: Request, outcome: AskOutcome) -> AskResponse:
         reason=outcome.reason.value if outcome.reason is not None else None,
         citations=[
             CitationSchema(
-                chunk_id=citation.chunk_id,
-                document_id=citation.document_id,
+                chunk_id=UUID(citation.chunk_id),
+                document_id=UUID(citation.document_id),
                 title=citation.title,
                 url=citation.url,
                 snippet=citation.snippet,
@@ -62,11 +66,15 @@ async def ask(
     payload: AskRequestSchema,
     deps: ApiDepsDep,
 ) -> AskResponse:
-    client_key = request.client.host if request.client is not None else "anonymous"
+    client_key = resolve_client_ip(
+        request.client.host if request.client is not None else None,
+        request.headers.get("x-forwarded-for"),
+        settings.ask_trusted_proxies.split(","),
+    )
     outcome = await run_ask(
         AskRequest(
             question=payload.question,
-            conversation_id=payload.conversation_id,
+            conversation_id=(str(payload.conversation_id) if payload.conversation_id else None),
             fingerprint=client_key,
         ),
         deps=deps.ask,

@@ -8,6 +8,7 @@ runs behind multiple replicas.
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
@@ -49,7 +50,7 @@ class RateLimiter:
             while hits and now - hits[0] >= self._window:
                 hits.popleft()
             if len(hits) >= self._limit:
-                retry_after = max(1, int(self._window - (now - hits[0])))
+                retry_after = max(1, math.ceil(self._window - (now - hits[0])))
                 raise RateLimitError(
                     f"Too many questions; retry in about {retry_after} seconds",
                     retry_after=retry_after,
@@ -138,5 +139,5 @@ class QuotaLimiter:
             while bucket and now - bucket[0] >= rule.window_seconds:
                 bucket.popleft()
             if len(bucket) >= rule.limit:
-                waits.append(max(1, int(rule.window_seconds - (now - bucket[0]))))
+                waits.append(max(1, math.ceil(rule.window_seconds - (now - bucket[0]))))
         return waits

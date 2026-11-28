@@ -30,4 +30,5 @@ COPY --chown=appuser:appuser alembic ./alembic
 
 EXPOSE 8000
 
-CMD ["uvicorn", "lankatax_ai.backend.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+# Ask quotas are per process; a shared limiter is required before scaling out.
+CMD ["uvicorn", "lankatax_ai.backend.api.asgi:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
