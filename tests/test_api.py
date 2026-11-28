@@ -29,6 +29,15 @@ from lankatax_ai.backend.config import Settings
 from lankatax_ai.backend.rag.types import RetrievalResult
 from lankatax_ai.backend.services.cache import CacheDeps
 from lankatax_ai.backend.services.errors import NotFoundError
+from lankatax_ai.backend.services.jobs import (
+    JobDeps,
+    JobDetails,
+    JobFilter,
+    JobReceipt,
+    JobRequest,
+    JobStatus,
+    JobSummary,
+)
 from lankatax_ai.backend.services.search import SearchDeps
 from lankatax_ai.backend.services.stats import StatsDeps
 from lankatax_ai.backend.types import SearchMode, SearchSource
@@ -183,6 +192,26 @@ class _FakeCacheAdmin:
         return 2
 
 
+class _FakeJobGateway:
+    async def enqueue(self, request: JobRequest) -> JobReceipt:
+        return JobReceipt(run_id="run-1")
+
+    async def list_jobs(self, filters: JobFilter) -> list[JobSummary]:
+        return []
+
+    async def get(self, run_id: str) -> JobDetails:
+        raise NotFoundError("job not found")
+
+    async def status(self, run_id: str) -> JobStatus:
+        return JobStatus.queued
+
+    async def cancel(self, run_id: str) -> None:
+        return None
+
+    async def replay(self, run_id: str) -> None:
+        return None
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class _Harness:
     deps: ApiDeps
@@ -210,6 +239,7 @@ def _harness(
             no_result_threshold=1.0,
         ),
         cache=CacheDeps(admin_factory=lambda session: _FakeCacheAdmin()),
+        jobs=JobDeps(gateway=_FakeJobGateway()),
         auth=AUTH,
     )
     return _Harness(deps=deps, analytics=analytics)

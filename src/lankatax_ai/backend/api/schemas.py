@@ -8,12 +8,13 @@ in ``utils.py``.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from lankatax_ai.backend.services.jobs import JobStatus, JobType, JsonObject
 from lankatax_ai.backend.services.search import limits
 from lankatax_ai.backend.types import LlmProvider, QueryType, SearchMode
 
@@ -24,6 +25,12 @@ __all__ = [
     "ErrorBody",
     "Health",
     "Hypermedia",
+    "JobDetailsSchema",
+    "JobListSchema",
+    "JobReceiptSchema",
+    "JobRequestSchema",
+    "JobSummarySchema",
+    "JobTaskSchema",
     "Link",
     "SearchRequest",
     "SearchResponse",
@@ -171,3 +178,47 @@ class CacheResponse(Hypermedia):
     total_hits: int
     hit_rate: float
     oldest_entry_hours: float
+
+
+class JobRequestSchema(BaseModel):
+    type: JobType
+    params: JsonObject = Field(default_factory=dict)
+    idempotency_key: str | None = Field(None, max_length=200)
+
+
+class JobTaskSchema(Hypermedia):
+    id: str
+    name: str
+    status: JobStatus
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    output: JsonObject | None = None
+    error: str | None = None
+
+
+class JobSummarySchema(Hypermedia):
+    id: str
+    type: JobType
+    status: JobStatus
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    requested_by: str | None = None
+    error: str | None = None
+
+
+class JobDetailsSchema(JobSummarySchema):
+    input: JsonObject = Field(default_factory=dict)
+    output: JsonObject | None = None
+    tasks: list[JobTaskSchema] = Field(default_factory=list)
+
+
+class JobReceiptSchema(Hypermedia):
+    run_id: str
+    reused: bool
+
+
+class JobListSchema(Hypermedia):
+    items: list[JobSummarySchema]

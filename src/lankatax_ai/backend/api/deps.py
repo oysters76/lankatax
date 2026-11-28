@@ -13,8 +13,11 @@ from fastapi import Depends, Request
 
 from lankatax_ai.backend.api.security import AuthConfig
 from lankatax_ai.backend.db.session import async_session
+from lankatax_ai.backend.jobs.client import build_hatchet_client
+from lankatax_ai.backend.jobs.gateway import HatchetJobGateway
 from lankatax_ai.backend.llm import build_embeddings
 from lankatax_ai.backend.services.cache import CacheDeps, build_cache_deps
+from lankatax_ai.backend.services.jobs import JobDeps
 from lankatax_ai.backend.services.protocols import SessionFactory
 from lankatax_ai.backend.services.search import SearchDeps, build_search_deps
 from lankatax_ai.backend.services.stats import StatsDeps, build_stats_deps
@@ -30,6 +33,7 @@ class ApiDeps:
     search: SearchDeps
     stats: StatsDeps
     cache: CacheDeps
+    jobs: JobDeps
     auth: AuthConfig
 
 
@@ -41,6 +45,7 @@ def build_api_deps(*, auth: AuthConfig) -> ApiDeps:
         search=build_search_deps(embeddings),
         stats=build_stats_deps(),
         cache=build_cache_deps(),
+        jobs=JobDeps(gateway=HatchetJobGateway(build_hatchet_client())),
         auth=auth,
     )
 
